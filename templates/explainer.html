@@ -1,0 +1,854 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+/* ── Layout ── */
+.xp-header { margin-bottom: 24px; }
+.xp-title  { font-family:'Orbitron',sans-serif; color:#00e0ff; font-size:22px; margin:0 0 6px; }
+.xp-sub    { color:#64748b; font-size:13px; margin:0; }
+
+.xp-card {
+  background:#0f172a; border:1px solid #1e293b;
+  border-radius:14px; padding:20px 24px; margin-bottom:16px;
+}
+.xp-card-full { grid-column:1/-1; }
+.xp-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:860px){ .xp-grid{ grid-template-columns:1fr; } }
+
+/* ── Responsive tweaks: tablet & mobile ─────────────────────────── */
+@media(max-width:820px){
+  .xp-card { padding:16px 16px; }
+  .xp-title { font-size:19px; }
+  canvas { max-width:100%; }
+}
+@media(max-width:600px){
+  .xp-title { font-size:17px; }
+  .xp-sub   { font-size:12px; }
+  .xp-card  { padding:14px 12px; border-radius:10px; }
+  .card-title { font-size:13px; flex-wrap:wrap; }
+  .history-search { width:100%; }
+  .history-toolbar > * { flex:1 1 auto; }
+  .verdict-bars { margin-left:0; width:100%; justify-content:flex-start; }
+  .flow-meta { gap:10px 16px; font-size:11px; }
+}
+
+.card-title {
+  font-size:14px; font-weight:700; color:#38bdf8;
+  margin:0 0 4px; display:flex; align-items:center; gap:8px;
+}
+.card-sub { font-size:11px; color:#475569; margin:0 0 14px; }
+
+/* ── Buttons ── */
+.btn-load {
+  background:linear-gradient(90deg,#00e0ff,#6a5cff);
+  border:none; padding:9px 20px; border-radius:30px;
+  color:#020617; font-weight:700; font-size:13px; cursor:pointer;
+  transition:.25s; margin-right:8px;
+}
+.btn-load:hover { box-shadow:0 0 18px rgba(0,224,255,.5); transform:translateY(-2px); }
+.btn-load:disabled { opacity:.5; transform:none; cursor:not-allowed; }
+.btn-sec {
+  background:rgba(255,255,255,.05); border:1px solid #1e293b;
+  padding:9px 18px; border-radius:30px; color:#94a3b8;
+  font-size:13px; cursor:pointer; transition:.2s;
+}
+.btn-sec:hover { border-color:#38bdf8; color:#38bdf8; }
+
+/* ── Status ── */
+#xp-status { font-size:12px; color:#475569; font-family:monospace; margin-top:10px; min-height:18px; }
+
+/* ── HISTORY TABLE ── */
+.history-toolbar {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px;
+}
+.history-search {
+  padding:7px 12px; background:rgba(255,255,255,.05);
+  border:1px solid #1e293b; border-radius:8px; color:#e2e8f0;
+  font-size:12px; width:180px; outline:none; transition:.2s;
+}
+.history-search:focus { border-color:#38bdf8; }
+.history-select {
+  padding:7px 10px; background:#0f172a;
+  border:1px solid #1e293b; border-radius:8px; color:#94a3b8;
+  font-size:12px; cursor:pointer;
+}
+.toggle-attacks {
+  padding:7px 14px; background:rgba(239,68,68,.08);
+  border:1px solid rgba(239,68,68,.2); border-radius:20px;
+  color:#f87171; font-size:12px; cursor:pointer; transition:.2s;
+}
+.toggle-attacks.active {
+  background:rgba(239,68,68,.2); border-color:#ef4444; color:#ef4444;
+}
+
+/* Table */
+.history-table-wrap { overflow-x:auto; }
+table.hist-tbl {
+  width:100%; border-collapse:collapse; font-size:12px;
+}
+table.hist-tbl th {
+  padding:9px 12px; text-align:left; color:#475569;
+  border-bottom:1px solid #1e293b; font-size:11px;
+  text-transform:uppercase; letter-spacing:.6px; white-space:nowrap;
+  cursor:pointer; user-select:none;
+}
+table.hist-tbl th:hover { color:#38bdf8; }
+table.hist-tbl td {
+  padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.03);
+  vertical-align:middle; white-space:nowrap;
+}
+table.hist-tbl tr:hover td { background:rgba(56,189,248,.04); }
+table.hist-tbl tr.selected td { background:rgba(0,224,255,.07); }
+
+.badge {
+  display:inline-block; padding:2px 10px; border-radius:20px;
+  font-size:11px; font-weight:700;
+}
+.badge-attack { background:rgba(239,68,68,.15); color:#ef4444; border:1px solid rgba(239,68,68,.3); }
+.badge-normal { background:rgba(34,197,94,.12);  color:#22c55e; border:1px solid rgba(34,197,94,.25); }
+
+.btn-explain-row {
+  padding:4px 14px; border-radius:20px; font-size:11px; font-weight:600;
+  border:1px solid rgba(0,224,255,.3); background:rgba(0,224,255,.06);
+  color:#00e0ff; cursor:pointer; transition:.2s;
+}
+.btn-explain-row:hover {
+  background:rgba(0,224,255,.18); border-color:#00e0ff;
+  box-shadow:0 0 10px rgba(0,224,255,.3);
+}
+.btn-explain-row.loading { opacity:.6; cursor:wait; }
+
+/* Pagination */
+.pagination {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-top:12px; font-size:12px;
+}
+.page-info { color:#475569; }
+.page-btns { display:flex; gap:6px; }
+.page-btn {
+  padding:5px 12px; border-radius:6px; font-size:12px;
+  background:rgba(255,255,255,.05); border:1px solid #1e293b;
+  color:#94a3b8; cursor:pointer; transition:.2s;
+}
+.page-btn:hover:not(:disabled) { border-color:#38bdf8; color:#38bdf8; }
+.page-btn:disabled { opacity:.3; cursor:not-allowed; }
+.page-btn.active { background:rgba(56,189,248,.15); border-color:#38bdf8; color:#38bdf8; }
+
+/* Loading row */
+.tbl-loading td { text-align:center; color:#334155; padding:24px; font-family:monospace; }
+.tbl-empty  td { text-align:center; color:#334155; padding:24px; font-size:12px; }
+
+/* ── Selected flow banner ── */
+.flow-banner {
+  display:flex; align-items:center; gap:16px; padding:12px 18px;
+  border-radius:10px; margin-bottom:16px; flex-wrap:wrap;
+  border:1px solid;
+}
+.flow-banner.attack { background:rgba(239,68,68,.07); border-color:rgba(239,68,68,.3); }
+.flow-banner.normal { background:rgba(34,197,94,.07);  border-color:rgba(34,197,94,.25); }
+.flow-meta { font-size:12px; color:#64748b; display:flex; gap:20px; flex-wrap:wrap; }
+.flow-meta span strong { color:#94a3b8; }
+
+/* ── Verdict ── */
+.verdict { display:flex; align-items:center; gap:14px; padding:14px 18px; border-radius:10px; border:1px solid; flex-wrap:wrap; }
+.verdict.attack { background:rgba(239,68,68,.08); border-color:rgba(239,68,68,.3); }
+.verdict.normal { background:rgba(34,197,94,.08); border-color:rgba(34,197,94,.25); }
+.verdict-icon  { font-size:34px; line-height:1; }
+.verdict-label { font-size:26px; font-weight:800; }
+.verdict-sub   { font-size:12px; color:#94a3b8; margin-top:3px; }
+.verdict-bars  { margin-left:auto; display:flex; gap:12px; }
+.vbar { text-align:center; font-size:11px; color:#64748b; }
+.vbar-val { font-size:20px; font-weight:700; display:block; }
+
+/* Class prob pills */
+.prob-list { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+.prob-pill {
+  padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600;
+  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
+  display:flex; align-items:center; gap:5px;
+}
+
+/* Plain English box */
+.plain-box {
+  background:rgba(0,224,255,.04); border:1px solid rgba(0,224,255,.1);
+  border-radius:10px; padding:14px 16px; font-size:13px; line-height:1.8;
+  color:#94a3b8;
+}
+.plain-box .highlight-atk { color:#ef4444; font-weight:600; }
+.plain-box .highlight-nrm { color:#22c55e; font-weight:600; }
+
+/* SHAP styles */
+.shap-title { font-size:11px; color:#64748b; margin-bottom:10px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; }
+.shap-row   { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:11px; }
+.shap-name  { width:150px; flex-shrink:0; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.shap-bar-wrap { flex:1; background:rgba(255,255,255,.05); border-radius:4px; height:9px; overflow:hidden; }
+.shap-bar   { height:9px; border-radius:4px; transition:width .4s ease; }
+.shap-val   { width:55px; text-align:right; flex-shrink:0; font-family:monospace; color:#64748b; font-size:11px; }
+
+/* Feature table */
+.feat-table-wrap { overflow-x:auto; }
+table.feat-tbl { width:100%; border-collapse:collapse; font-size:11px; }
+table.feat-tbl th { padding:7px 10px; color:#475569; border-bottom:1px solid #1e293b; text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.5px; }
+table.feat-tbl td { padding:6px 10px; border-bottom:1px solid rgba(255,255,255,.03); }
+table.feat-tbl tr:nth-child(even) td { background:rgba(255,255,255,.015); }
+
+/* Beginner steps */
+.explainer-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+@media(max-width:700px){ .explainer-steps{ grid-template-columns:1fr; } }
+.step-card { background:rgba(255,255,255,.03); border:1px solid #1e293b; border-radius:10px; padding:14px; text-align:center; }
+.step-num  { font-size:26px; font-weight:800; color:#00e0ff; font-family:'Orbitron',sans-serif; }
+.step-title{ font-size:12px; font-weight:700; color:#e2e8f0; margin:5px 0 4px; }
+.step-desc { font-size:11px; color:#64748b; line-height:1.6; }
+
+/* Explanation loading spinner */
+.explain-spinner {
+  display:flex; align-items:center; gap:12px;
+  color:#38bdf8; font-size:13px; font-family:monospace; padding:20px 0;
+}
+.spinner-dot { width:8px; height:8px; border-radius:50%; background:#38bdf8; animation:spinDot .8s ease-in-out infinite; }
+.spinner-dot:nth-child(2){ animation-delay:.15s; }
+.spinner-dot:nth-child(3){ animation-delay:.30s; }
+@keyframes spinDot{ 0%,100%{opacity:.2;transform:scale(.7)} 50%{opacity:1;transform:scale(1)} }
+</style>
+
+<!-- ── Page header ── -->
+<div class="xp-header">
+  <h1 class="xp-title">🔬 SHAP Explainability Centre</h1>
+  <p class="xp-sub">Investigate <em>any</em> predicted flow — select from history and understand the AI's reasoning</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PREDICTION HISTORY TABLE
+     ══════════════════════════════════════════════════════════ -->
+<div class="xp-card">
+  <div class="card-title">🗂 Prediction History</div>
+  <div class="card-sub">Select any flow to generate its full SHAP explanation. All flows from the current session are listed below.</div>
+
+  <!-- Toolbar -->
+  <div class="history-toolbar">
+    <input  type="text"  id="searchIp"   class="history-search"  placeholder="🔍 Search IP…" oninput="debounceLoad()">
+    <select id="clsFilter" class="history-select" onchange="loadHistory(1)">
+      <option value="">All Classes</option>
+      <option value="Bot">Bot</option>
+      <option value="Bruteforce">Bruteforce</option>
+      <option value="DDoS">DDoS</option>
+      <option value="DoS">DoS</option>
+      <option value="Infiltration">Infiltration</option>
+      <option value="Normal">Normal</option>
+      <option value="PortScan">PortScan</option>
+      <option value="WebAttack">WebAttack</option>
+    </select>
+    <button id="btnAttacksOnly" class="toggle-attacks" onclick="toggleAttacksOnly()">⚠ Attacks Only</button>
+    <button class="btn-sec" onclick="loadHistory(1)" style="margin-left:auto;">🔄 Refresh</button>
+  </div>
+
+  <!-- Table -->
+  <div class="history-table-wrap">
+    <table class="hist-tbl" id="histTable">
+      <thead>
+        <tr>
+          <th>Flow ID</th>
+          <th>Time</th>
+          <th>Source IP</th>
+          <th>Prediction</th>
+          <th>Confidence</th>
+          <th>Atk Score</th>
+          <th>Ground Truth</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="histBody">
+        <tr class="tbl-loading"><td colspan="8">Loading prediction history…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination">
+    <div class="page-info" id="pageInfo">—</div>
+    <div class="page-btns" id="pageBtns"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     STATUS + EXPLANATION PANEL (hidden until flow selected)
+     ══════════════════════════════════════════════════════════ -->
+<div id="xp-status" style="font-size:12px;color:#475569;font-family:monospace;margin:8px 0 16px;min-height:18px;">
+  Select a flow above to generate its SHAP explanation.
+</div>
+
+<div id="xp-verdict-section" style="display:none;">
+
+  <!-- Selected flow banner -->
+  <div id="flow-banner" class="flow-banner normal">
+    <div>
+      <div style="font-size:18px;font-weight:800;" id="banner-label">—</div>
+      <div class="flow-meta" id="banner-meta"></div>
+    </div>
+    <button class="btn-sec" style="margin-left:auto;" onclick="clearExplanation()">✕ Clear</button>
+  </div>
+
+  <!-- Verdict + Plain English -->
+  <div class="xp-grid" style="margin-bottom:16px;">
+    <div class="xp-card">
+      <div class="card-title">🤖 AI Verdict</div>
+      <div class="card-sub">What the model decided and how confident it was</div>
+      <div id="verdict-banner" class="verdict normal">
+        <div class="verdict-icon" id="verdict-icon">✅</div>
+        <div>
+          <div class="verdict-label" id="verdict-label">Normal</div>
+          <div class="verdict-sub"   id="verdict-sub">—</div>
+        </div>
+        <div class="verdict-bars">
+          <div class="vbar"><span class="vbar-val" id="vbar-conf"  style="color:#38bdf8;">—</span>Confidence</div>
+          <div class="vbar"><span class="vbar-val" id="vbar-score" style="color:#f59e0b;">—</span>Atk Score</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="font-size:11px;color:#64748b;margin-bottom:7px;font-weight:600;">Class probabilities:</div>
+        <div id="prob-list" class="prob-list"></div>
+      </div>
+    </div>
+
+    <div class="xp-card">
+      <div class="card-title">💬 Plain English Explanation</div>
+      <div class="card-sub">What this means — for everyone</div>
+      <div id="plain-english" class="plain-box">Loading…</div>
+      <div style="margin-top:14px;padding:10px 12px;background:rgba(0,0,0,.2);border-radius:8px;font-size:11px;color:#475569;line-height:1.7;">
+        <strong style="color:#64748b;">How to read SHAP:</strong><br>
+        <span style="color:#ef4444;">Red bar</span> = increases the predicted class's probability &nbsp;
+        <span style="color:#3b82f6;">Blue bar</span> = decreases it.
+        Longer bar = stronger influence.
+      </div>
+    </div>
+  </div>
+
+  <!-- Waterfall chart -->
+  <div class="xp-card" style="margin-bottom:16px;">
+    <div class="card-title">📊 SHAP Waterfall Chart</div>
+    <canvas id="waterfallCanvas" style="width:100%;"></canvas>
+  </div>
+
+  <!-- Feature details table -->
+  <div class="xp-card" style="margin-bottom:16px;">
+    <div class="card-title">🗂 Feature Details</div>
+    <div class="card-sub">Actual values and SHAP impact for every feature in this flow</div>
+    <div class="feat-table-wrap">
+      <table class="feat-tbl">
+        <thead><tr><th>#</th><th>Feature</th><th>Value</th><th>SHAP Impact</th><th>Direction</th><th>Meaning</th></tr></thead>
+        <tbody id="featureTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <!-- Misclassification analysis (only shown when true label differs from prediction) -->
+  <div class="xp-card" id="misclass-section" style="display:none;margin-top:16px;border-color:rgba(245,158,11,.3);">
+    <div class="card-title">⚠️ Why Was This Misclassified?</div>
+    <div class="card-sub">The model's true label doesn't match its prediction — here's what likely caused it</div>
+    <div id="misclass-summary" style="margin:10px 0 14px;padding:12px 14px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:12px;color:#e2e8f0;line-height:1.8;"></div>
+    <div id="misclass-reason" class="plain-box"></div>
+  </div>
+
+
+</div><!-- /#xp-verdict-section -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ═══════════════════════════════════════════════════════════════
+// SHAP Explainability Centre — History Table + Per-Flow Explain
+// ═══════════════════════════════════════════════════════════════
+
+const CLASS_COLOURS = {
+  Normal:'#22c55e', Bot:'#ef4444', Bruteforce:'#f97316',
+  DDoS:'#ef4444', DoS:'#ef4444', Infiltration:'#a855f7',
+  PortScan:'#f59e0b', WebAttack:'#f97316'
+};
+const FEAT_PLAIN = {
+  'Flow Duration':'Total connection time','Flow Bytes/s':'Data rate (bytes/sec)',
+  'Flow Packets/s':'Packet sending rate','Flow IAT Mean':'Avg gap between packets',
+  'Flow IAT Std':'Irregularity of timing','Flow IAT Max':'Longest packet pause',
+  'Flow IAT Min':'Shortest packet pause','Fwd IAT Total':'Total forward gap time',
+  'Fwd IAT Std':'Forward timing irregularity','Fwd IAT Max':'Longest forward pause',
+  'Fwd Packet Length Mean':'Avg forward packet size','Fwd Packet Length Max':'Largest forward packet',
+  'Fwd Packet Length Std':'Forward size variation','Packet Length Mean':'Avg packet size',
+  'Packet Length Std':'Packet size variation','Packet Length Variance':'Size variance',
+  'Packet Length Max':'Largest packet','Bwd Packet Length Mean':'Avg reply size',
+  'Bwd Packet Length Max':'Largest reply packet','Bwd Packet Length Std':'Reply size variation',
+  'Avg Packet Size':'Overall avg size','Avg Fwd Segment Size':'Avg forward segment',
+  'Avg Bwd Segment Size':'Avg reply segment','Bwd Packets/s':'Reply packet rate',
+  'Fwd Packets/s':'Forward packet rate','Init Fwd Win Bytes':'Initial TCP window (fwd)',
+  'Init Bwd Win Bytes':'Initial TCP window (bwd)','Fwd PSH Flags':'TCP PUSH flags (fwd)',
+  'Fwd Header Length':'Forward header size','Bwd Header Length':'Reply header size',
+  'Subflow Fwd Bytes':'Forward bytes/subflow','Subflow Bwd Bytes':'Reply bytes/subflow',
+  'Subflow Bwd Packets':'Reply packets/subflow','Active Mean':'Avg active period',
+  'Active Max':'Longest active period','Fwd Seg Size Min':'Min forward segment',
+};
+
+// ── Pagination state ──────────────────────────────────────────
+let currentPage  = 1;
+let totalPages   = 1;
+let attacksOnly  = false;
+let searchTimer  = null;
+let activeFlowId = null;
+let lastExplainData = null; // cached so charts can be redrawn crisply on resize/orientation change
+
+// ── Debounced search ──────────────────────────────────────────
+function debounceLoad(){
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(()=>loadHistory(1), 400);
+}
+
+function toggleAttacksOnly(){
+  attacksOnly = !attacksOnly;
+  const btn = document.getElementById('btnAttacksOnly');
+  btn.classList.toggle('active', attacksOnly);
+  loadHistory(1);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Load prediction history table
+// ══════════════════════════════════════════════════════════════
+async function loadHistory(page=1){
+  currentPage = page;
+  const search  = document.getElementById('searchIp').value.trim();
+  const cls     = document.getElementById('clsFilter').value;
+
+  const params = new URLSearchParams({
+    page, per_page:20,
+    ...(cls          && { class_filter: cls }),
+    ...(attacksOnly  && { attacks_only: 'true' }),
+    ...(search       && { search }),
+  });
+
+  const tbody = document.getElementById('histBody');
+  tbody.innerHTML = `<tr class="tbl-loading"><td colspan="8">⏳ Loading…</td></tr>`;
+
+  try {
+    const r = await fetch(`/api/predictions?${params}`);
+    const d = await r.json();
+    if(d.error){ tbody.innerHTML=`<tr class="tbl-empty"><td colspan="8">❌ ${d.error}</td></tr>`; return; }
+
+    totalPages = d.pages;
+    renderTable(d.flows, d.total, d.page, d.per_page);
+    renderPagination(d.page, d.pages, d.total);
+  } catch(e){
+    tbody.innerHTML=`<tr class="tbl-empty"><td colspan="8">❌ Failed to load history: ${e.message}</td></tr>`;
+  }
+}
+
+function renderTable(flows, total, page, perPage){
+  const tbody = document.getElementById('histBody');
+  if(!flows || flows.length===0){
+    tbody.innerHTML=`<tr class="tbl-empty"><td colspan="8">No flows found. Run a replay first.</td></tr>`;
+    document.getElementById('pageInfo').textContent='No results';
+    return;
+  }
+
+  const offset = (page-1)*perPage;
+  tbody.innerHTML = flows.map((f,i)=>{
+    const col    = CLASS_COLOURS[f.label_str]||'#888';
+    const cls    = f.is_attack ? 'badge-attack' : 'badge-normal';
+    const icon   = f.is_attack ? '🔴' : '✅';
+    const trCls  = activeFlowId===f.id ? 'selected' : '';
+    const truthMismatch = f.true_label && f.true_label!=='Normal' && f.label_str==='Normal';
+    const truthBadge = f.true_label
+      ? `<span style="color:${f.true_label===f.label_str?'#475569':'#f59e0b'};font-size:10px;">${f.true_label}</span>`
+      : '<span style="color:#334155;font-size:10px;">—</span>';
+
+    return `<tr data-id="${f.id}" class="${trCls}" onclick="selectRow(${f.id})">
+      <td style="color:#475569;font-family:monospace;">#${f.id}</td>
+      <td style="color:#64748b;font-family:monospace;">${f.ts_fmt}</td>
+      <td style="font-family:monospace;color:#94a3b8;">${f.src_ip||'—'}</td>
+      <td><span class="badge ${cls}">${icon} ${f.label_str}</span></td>
+      <td style="color:${col};font-weight:600;">${(f.confidence*100).toFixed(1)}%</td>
+      <td style="color:${f.is_attack?'#ef4444':'#22c55e'};">${(f.attack_score*100).toFixed(1)}%</td>
+      <td>${truthBadge}</td>
+      <td>
+        <button class="btn-explain-row" id="explbtn-${f.id}"
+                onclick="event.stopPropagation();explainFlow(${f.id})">
+          🔬 Explain
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('pageInfo').textContent =
+    `Showing ${offset+1}–${Math.min(offset+flows.length, total)} of ${total} flows`;
+}
+
+function selectRow(id){
+  document.querySelectorAll('#histBody tr').forEach(tr=>{
+    tr.classList.toggle('selected', parseInt(tr.dataset.id)===id);
+  });
+  activeFlowId = id;
+}
+
+function renderPagination(page, pages, total){
+  const info = document.getElementById('pageInfo');
+  const btns = document.getElementById('pageBtns');
+
+  // Build page buttons — show first, last, current ± 2
+  const show = new Set([1, pages, page-2, page-1, page, page+1, page+2]
+    .filter(p=>p>=1&&p<=pages));
+  const sorted = [...show].sort((a,b)=>a-b);
+
+  let html='';
+  let prev=-1;
+  for(const p of sorted){
+    if(prev!==-1 && p-prev>1) html+=`<span style="color:#334155;padding:0 4px;">…</span>`;
+    html+=`<button class="page-btn${p===page?' active':''}" onclick="loadHistory(${p})">${p}</button>`;
+    prev=p;
+  }
+  btns.innerHTML=`
+    <button class="page-btn" ${page<=1?'disabled':''} onclick="loadHistory(${page-1})">← Prev</button>
+    ${html}
+    <button class="page-btn" ${page>=pages?'disabled':''} onclick="loadHistory(${page+1})">Next →</button>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Explain a specific flow by ID
+// ══════════════════════════════════════════════════════════════
+async function explainFlow(flowId){
+  selectRow(flowId);
+  activeFlowId = flowId;
+
+  const btn = document.getElementById(`explbtn-${flowId}`);
+  if(btn){ btn.classList.add('loading'); btn.textContent='⏳ Explaining…'; }
+
+  document.getElementById('xp-status').innerHTML =
+    `<div class="explain-spinner">
+      <div class="spinner-dot"></div><div class="spinner-dot"></div><div class="spinner-dot"></div>
+      <span>Generating SHAP explanation for Flow #${flowId}…</span>
+    </div>`;
+
+  document.getElementById('xp-verdict-section').style.display='none';
+
+  try {
+    const r = await fetch(`/api/explain/${flowId}`);
+    const d = await r.json();
+
+    if(btn){ btn.classList.remove('loading'); btn.textContent='🔬 Explain'; }
+
+    if(!d.available){
+      renderError(d, flowId);
+      return;
+    }
+
+    document.getElementById('xp-status').textContent =
+      `✅ SHAP explanation for Flow #${flowId} · ${d.label_str} · ${(d.confidence*100).toFixed(1)}% confidence`;
+
+    lastExplainData = d;
+    renderAll(d, flowId);
+  } catch(e){
+    if(btn){ btn.classList.remove('loading'); btn.textContent='🔬 Explain'; }
+    document.getElementById('xp-status').textContent = `❌ Error: ${e.message}`;
+  }
+}
+
+function renderError(d, flowId){
+  const isInstalled = d.shap_installed===true;
+  const err = d.error||'Unknown error';
+  let html='';
+  if(!isInstalled){
+    html=`<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:14px 18px;font-size:12px;line-height:1.8;">
+      <div style="color:#ef4444;font-weight:700;margin-bottom:6px;">⚠️ SHAP not installed in virtual environment</div>
+      <div style="color:#94a3b8;">Activate venv, then run:
+      <code style="display:block;background:#020810;padding:8px 12px;border-radius:6px;margin:8px 0;color:#00e0ff;">pip install shap</code>
+      Then restart: <code style="color:#00e0ff;">python app.py</code></div>
+      <div style="margin-top:8px;font-size:10px;color:#334155;">Error: ${err}</div></div>`;
+  } else {
+    html=`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:14px 18px;font-size:12px;line-height:1.8;">
+      <div style="color:#f59e0b;font-weight:700;margin-bottom:6px;">⚠️ SHAP error for Flow #${flowId}</div>
+      <div style="color:#94a3b8;">Check server terminal for full traceback.<br>
+      <code style="color:#f59e0b;">${err}</code></div></div>`;
+  }
+  document.getElementById('xp-status').innerHTML = html;
+}
+
+function clearExplanation(){
+  document.getElementById('xp-verdict-section').style.display='none';
+  document.getElementById('xp-status').textContent='Select a flow above to generate its SHAP explanation.';
+  activeFlowId=null;
+  lastExplainData=null;
+  document.querySelectorAll('#histBody tr').forEach(tr=>tr.classList.remove('selected'));
+}
+
+// ══════════════════════════════════════════════════════════════
+// Render all SHAP visualisations
+// ══════════════════════════════════════════════════════════════
+function renderAll(d, flowId){
+  const shap      = d.all_shap;
+  const label_str = d.db_label || d.label_str;
+  const is_attack = label_str !== 'Normal';
+  const col       = CLASS_COLOURS[label_str]||'#888';
+  const confidence= d.db_conf  ?? d.confidence ?? 0;
+  const atk_score = d.db_score ?? d.attack_score ?? 0;
+
+  document.getElementById('xp-verdict-section').style.display='block';
+
+  // ── Flow banner ──────────────────────────────────────────────
+  const banner = document.getElementById('flow-banner');
+  banner.className = `flow-banner ${is_attack?'attack':'normal'}`;
+  document.getElementById('banner-label').innerHTML =
+    `<span style="color:${col};">${is_attack?'🔴':'✅'} ${label_str}</span>` +
+    `<span style="font-size:14px;color:#64748b;font-weight:400;margin-left:14px;">Flow #${flowId}</span>`;
+  document.getElementById('banner-meta').innerHTML = [
+    d.flow_ts ? `<span><strong>Time:</strong> ${new Date(d.flow_ts*1000).toLocaleTimeString()}</span>` : '',
+    d.src_ip  ? `<span><strong>Src:</strong> ${d.src_ip}</span>` : '',
+    d.dst_ip  ? `<span><strong>Dst:</strong> ${d.dst_ip}</span>` : '',
+    d.true_label ? `<span><strong>True Label:</strong> ${d.true_label}</span>` : '',
+    d.latency_ms ? `<span><strong>Latency:</strong> ${d.latency_ms}ms</span>` : '',
+  ].filter(Boolean).join('');
+
+  // ── Verdict ──────────────────────────────────────────────────
+  const vb = document.getElementById('verdict-banner');
+  vb.className = `verdict ${is_attack?'attack':'normal'}`;
+  document.getElementById('verdict-icon').textContent  = is_attack?'🚨':'✅';
+  document.getElementById('verdict-label').textContent = label_str;
+  document.getElementById('verdict-label').style.color = col;
+  document.getElementById('verdict-sub').textContent   = `Predicted class for Flow #${flowId}`;
+  document.getElementById('vbar-conf').textContent     = (confidence*100).toFixed(1)+'%';
+  document.getElementById('vbar-score').textContent    = (atk_score*100).toFixed(1)+'%';
+
+  // Class proba pills
+  const proba = d.stored_proba || d.class_proba || {};
+  const cls_names = ['Bot','Bruteforce','DDoS','DoS','Infiltration','Normal','PortScan','WebAttack'];
+  const sorted = cls_names.filter(c=>proba[c]!==undefined).sort((a,b)=>proba[b]-proba[a]);
+  document.getElementById('prob-list').innerHTML = sorted.map(c=>{
+    const cc=(CLASS_COLOURS[c]||'#888'), p=((proba[c]||0)*100).toFixed(1);
+    return `<div class="prob-pill" style="border-color:${cc}44;">
+      <span style="width:7px;height:7px;background:${cc};border-radius:50%;display:inline-block;"></span>
+      <span style="color:${cc};">${c}</span><span style="color:#64748b;">${p}%</span></div>`;
+  }).join('');
+
+  // ── Plain English ─────────────────────────────────────────────
+  const topPos = (shap||[]).filter(s=>s.direction==='up').slice(0,2).map(s=>s.feature);
+  const topNeg = (shap||[]).filter(s=>s.direction==='down').slice(0,2).map(s=>s.feature);
+  const cp     = (confidence*100).toFixed(0);
+  let txt='';
+  if(is_attack){
+    txt=`Flow #${flowId} was classified as <span class="highlight-atk">${label_str}</span> with <strong>${cp}% confidence</strong>.
+      ${topPos.length?`The strongest attack signals are <strong>${topPos.join('</strong> and <strong>')}</strong>.`:''}
+      ${topNeg.length?`<strong>${topNeg.join('</strong> and <strong>')}</strong> were pulling toward Normal but not enough.`:''}
+      <strong>Recommend investigating this flow immediately.</strong>`;
+  } else {
+    txt=`Flow #${flowId} is <span class="highlight-nrm">Normal traffic</span> with <strong>${cp}% confidence</strong>.
+      ${topNeg.length?`Strongest normal signals: <strong>${topNeg.join('</strong> and <strong>')}</strong>.`:''}
+      ${topPos.length?`Minor attack-like signals in <strong>${topPos.join('</strong> and <strong>')}</strong> were not significant.`:''}
+      No action required.`;
+  }
+  document.getElementById('plain-english').innerHTML = txt;
+
+  // ── Misclassification analysis ────────────────────────────────
+  const misSection = document.getElementById('misclass-section');
+  const trueLabel  = d.true_label;
+  const misclassified = trueLabel && trueLabel !== label_str;
+  if(misclassified){
+    misSection.style.display='block';
+    const trueCol   = CLASS_COLOURS[trueLabel]||'#888';
+    const predProb  = ((proba[label_str]||0)*100).toFixed(1);
+    const trueProb  = ((proba[trueLabel]||0)*100).toFixed(1);
+    const gap       = Math.abs((proba[label_str]||0) - (proba[trueLabel]||0))*100;
+
+    document.getElementById('misclass-summary').innerHTML =
+      `<strong>True Label:</strong> <span style="color:${trueCol};">${trueLabel}</span>
+       &nbsp;→&nbsp; <strong>Predicted:</strong> <span style="color:${col};">${label_str}</span><br>
+       Model gave <strong style="color:${trueCol};">${trueProb}%</strong> to the correct class (${trueLabel})
+       vs <strong style="color:${col};">${predProb}%</strong> to the predicted class (${label_str}).`;
+
+    // Top features that pushed the decision toward the (wrong) predicted class
+    const drivers = (shap||[]).filter(s=>s.direction==='up').slice(0,3).map(s=>s.feature);
+    const counter = (shap||[]).filter(s=>s.direction==='down').slice(0,2).map(s=>s.feature);
+
+    let reason='';
+    if(gap < 15){
+      reason = `<strong>Borderline call:</strong> the model's confidence in "${label_str}" (${predProb}%) was only
+        slightly higher than in the true class "${trueLabel}" (${trueProb}%) — a gap of just ${gap.toFixed(1)} points.
+        ${drivers.length?`Features like <strong>${drivers.join('</strong>, <strong>')}</strong> tipped it just enough toward ${label_str}.`:''}
+        This is typical of <em>feature overlap</em>: ${trueLabel} and ${label_str} flows can look statistically similar
+        on several of the 35 tracked features, so a small variation is enough to flip the verdict.`;
+    } else {
+      reason = `<strong>Strong feature overlap or rare-class weakness:</strong> the model was fairly confident
+        (${predProb}%) in the wrong class "${label_str}", far ahead of the true class "${trueLabel}" (${trueProb}%).
+        ${drivers.length?`<strong>${drivers.join('</strong>, <strong>')}</strong> strongly resembled typical ${label_str} patterns.`:''}
+        ${counter.length?`Signals pointing to the correct class (<strong>${counter.join('</strong>, <strong>')}</strong>) were present but too weak to outweigh them.`:''}
+        This usually happens when the true class is under-represented in training data, or when its network-level
+        signature closely resembles another attack/normal category.`;
+    }
+    document.getElementById('misclass-reason').innerHTML = reason;
+  } else {
+    misSection.style.display='none';
+  }
+
+  // ── Charts ──────────────────────────────────────────────────
+  if(shap && shap.length>0){
+    drawWaterfall(shap, confidence);
+    buildTable(shap);
+  }
+
+  // Scroll explanation into view
+  document.getElementById('flow-banner').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// ── Canvas helpers ────────────────────────────────────────────
+function setupCanvas(id, heightPx){
+  const el=document.getElementById(id);
+  const DPR=window.devicePixelRatio||1;
+  const W=el.parentElement.clientWidth-48;
+  el.width=W*DPR; el.height=heightPx*DPR;
+  el.style.width=W+'px'; el.style.height=heightPx+'px';
+  const ctx=el.getContext('2d'); ctx.scale(DPR,DPR);
+  return {ctx,W,H:heightPx};
+}
+
+// Standard SHAP-style waterfall: chevron bars chained cumulatively from
+// baseline up to the final prediction score, largest impact features
+// at top, remaining low-impact features grouped into one "Remaining N Features" row.
+function drawWaterfall(shap, confidence){
+  const MAX_SHOW=9;
+  const sorted = [...shap].sort((a,b)=>Math.abs(b.shap_value)-Math.abs(a.shap_value));
+  const top  = sorted.slice(0,MAX_SHOW);
+  const rest = sorted.slice(MAX_SHOW);
+  const restSum = rest.reduce((s,v)=>s+v.shap_value,0);
+  const rows = [...top];
+  if(rest.length) rows.push({feature:`Remaining ${rest.length} Features`, value:null, shap_value:restSum, isGroup:true});
+
+  const totalShap = sorted.reduce((s,v)=>s+v.shap_value,0);
+  const fx       = (typeof confidence==='number') ? confidence : (0 + totalShap);
+  const baseline = fx - totalShap;
+
+  // Cumulative running total, built bottom-up (last/smallest row applied first,
+  // largest row at top arrives exactly at the final prediction score).
+  const withCum = new Array(rows.length);
+  let cum = baseline;
+  for(let i=rows.length-1;i>=0;i--){
+    const before=cum, after=cum+rows[i].shap_value;
+    withCum[i] = {...rows[i], before, after};
+    cum = after;
+  }
+
+  const ROWS=rows.length, ROW_H=34;
+  const PAD={t:40,b:34,l:16,r:16};
+  const LABEL_W=210;
+  const H_CSS=PAD.t+ROWS*ROW_H+PAD.b;
+  const el=document.getElementById('waterfallCanvas');
+  const DPR=window.devicePixelRatio||1;
+  const W=el.parentElement.clientWidth-48;
+  el.width=W*DPR; el.height=H_CSS*DPR;
+  el.style.width=W+'px'; el.style.height=H_CSS+'px';
+  const g=el.getContext('2d'); g.scale(DPR,DPR);
+
+  const PLOT_L=PAD.l+LABEL_W, PLOT_R=W-PAD.r, PLOT_W=PLOT_R-PLOT_L;
+
+  // ── domain (used only to scale bar positions — no tick marks/numbers shown) ──
+  const vals=[baseline,fx,...withCum.flatMap(r=>[r.before,r.after])];
+  let lo=Math.min(...vals), hi=Math.max(...vals);
+  const pad=(hi-lo||0.1)*0.12; lo-=pad; hi+=pad;
+  const xOf = v => PLOT_L + ((v-lo)/(hi-lo||1))*PLOT_W;
+
+  g.clearRect(0,0,W,H_CSS);
+
+  // ── Prediction Score marker (top) ────────────────────────────────
+  const fxX=xOf(fx);
+  g.fillStyle='#e2e8f0'; g.font='bold 12px "Courier New",monospace';
+  g.textAlign='center'; g.textBaseline='alphabetic';
+  g.fillText(`Prediction Score: ${fx.toFixed(3)}`, fxX, PAD.t-14);
+
+  // ── rows: chevron bars ───────────────────────────────────────────
+  withCum.forEach((r,i)=>{
+    const y=PAD.t+i*ROW_H;
+    g.fillStyle=i%2===0?'rgba(255,255,255,0.015)':'transparent';
+    g.fillRect(0,y,W,ROW_H);
+
+    const isPos=r.shap_value>=0;
+    const col=isPos?'#ef4444':'#3b82f6';
+    const x1=xOf(r.before), x2=xOf(r.after);
+    const yTop=y+ROW_H*0.22, yBot=y+ROW_H*0.78, yMid=y+ROW_H/2;
+    const tip=Math.min(7,Math.abs(x2-x1)/2);
+    const left=Math.min(x1,x2), right=Math.max(x1,x2);
+
+    g.fillStyle=col; g.globalAlpha=0.88;
+    g.beginPath();
+    if(x2>=x1){ // points right
+      g.moveTo(left,yTop); g.lineTo(right-tip,yTop); g.lineTo(right,yMid);
+      g.lineTo(right-tip,yBot); g.lineTo(left,yBot);
+    } else {    // points left
+      g.moveTo(right,yTop); g.lineTo(left+tip,yTop); g.lineTo(left,yMid);
+      g.lineTo(left+tip,yBot); g.lineTo(right,yBot);
+    }
+    g.closePath(); g.fill(); g.globalAlpha=1;
+
+    // value label (inside bar if wide enough, else beside it)
+    const barPx=Math.abs(x2-x1);
+    const valTxt=`${isPos?'+':'−'}${Math.abs(r.shap_value).toFixed(4)}`;
+    g.font='bold 10px "Courier New",monospace';
+    const txtW=g.measureText(valTxt).width;
+    g.textAlign='center'; g.textBaseline='middle';
+    if(barPx>txtW+14){
+      g.fillStyle='#0a0e17'; g.fillText(valTxt,(x1+x2)/2,yMid);
+    } else {
+      g.fillStyle=col;
+      const pointsRight = x2>=x1;
+      g.textAlign = pointsRight ? 'left' : 'right';
+      g.fillText(valTxt, pointsRight ? x2+8 : x2-8, yMid);
+      g.textAlign='center';
+    }
+
+    // feature label (left side)
+    g.fillStyle='#94a3b8'; g.font='11px "Courier New",monospace';
+    g.textAlign='right'; g.textBaseline='middle';
+    let name = r.isGroup ? r.feature
+      : `${r.value!==null&&r.value!==undefined?Number(r.value).toLocaleString(undefined,{maximumFractionDigits:2}):''} = ${r.feature}`;
+    while(g.measureText(name).width>LABEL_W-16 && name.length>4) name=name.slice(0,-1);
+    if(name.length< (r.feature||'').length) name+='…';
+    g.fillStyle = r.isGroup ? '#64748b' : '#cbd5e1';
+    g.font = r.isGroup ? '10px "Courier New",monospace' : 'bold 11px "Courier New",monospace';
+    g.fillText(name, PLOT_L-14, yMid);
+  });
+
+  // legend
+  g.textAlign='left'; g.textBaseline='alphabetic'; g.font='10px "Courier New",monospace';
+  g.fillStyle='#ef4444'; g.fillText('▮ Pushes toward predicted class', PAD.l, H_CSS-8);
+  g.fillStyle='#3b82f6'; g.fillText('▮ Pushes away from predicted class', PAD.l+220, H_CSS-8);
+}
+
+
+function buildTable(shap){
+  const sorted=[...shap].sort((a,b)=>Math.abs(b.shap_value)-Math.abs(a.shap_value));
+  document.getElementById('featureTableBody').innerHTML=sorted.map((s,i)=>{
+    const isPos=s.shap_value>0, col=isPos?'#ef4444':'#3b82f6';
+    const absVal=Math.abs(s.shap_value);
+    const strength=absVal>0.05?'🔴 Strong':absVal>0.01?'🟡 Moderate':'🟢 Weak';
+    const dir=isPos?`<span style="color:#ef4444;font-weight:700;">▲ Increases</span>`
+                   :`<span style="color:#3b82f6;font-weight:700;">▼ Decreases</span>`;
+    return `<tr>
+      <td style="color:#475569;">${i+1}</td>
+      <td style="color:#94a3b8;" title="${FEAT_PLAIN[s.feature]||s.feature}">${s.feature}</td>
+      <td style="font-family:monospace;color:#e2e8f0;">${Number(s.value).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+      <td style="color:${col};font-family:monospace;font-weight:700;">${isPos?'+':'−'}${absVal.toFixed(4)} ${strength}</td>
+      <td>${dir}</td>
+      <td style="color:#64748b;font-size:10px;">${FEAT_PLAIN[s.feature]||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Auto-load on page open ────────────────────────────────────
+loadHistory(1);
+setInterval(()=>loadHistory(currentPage), 30000);  // auto-refresh every 30s
+
+// ── Responsive redraw: canvases are sized in JS from their container's
+//    pixel width at render time, so they don't auto-adapt like plain CSS/
+//    HTML would when the window is resized or a device is rotated. Re-run
+//    the render for whichever flow is currently shown whenever the layout
+//    width actually changes, so charts stay crisp on any screen size. ──
+let _resizeTimer=null, _lastW=window.innerWidth;
+window.addEventListener('resize', ()=>{
+  if(window.innerWidth===_lastW) return; // ignore pure vertical/height-only changes
+  _lastW=window.innerWidth;
+  clearTimeout(_resizeTimer);
+  _resizeTimer=setTimeout(()=>{
+    if(lastExplainData && activeFlowId) renderAll(lastExplainData, activeFlowId);
+  }, 200);
+});
+</script>
+{% endblock %}

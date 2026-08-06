@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- ===================================================== -->
+    <!-- DOCUMENT METADATA -->
+    <!-- ===================================================== -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NIDS AI Security Platform</title>
+
+    <!-- ===================================================== -->
+    <!-- EXTERNAL LIBRARIES -->
+    <!-- ===================================================== -->
+    <!-- Google Fonts -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&family=Poppins:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+
+    <!-- Three.js + Globe.gl removed — using inline Canvas map instead -->
+
+    <style>
+      /* ===================================================== */
+      /* GLOBAL THEME VARIABLES */
+      /* ===================================================== */
+
+      :root {
+        --bg: #040414;
+        --primary: #00e0ff;
+        --secondary: #6a5cff;
+        --danger: #ff3b3b;
+        --text: #e6f7ff;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Poppins", sans-serif;
+        background: #040414;
+        color: var(--text);
+        overflow-x: hidden;
+      }
+
+      /* ===================================================== */
+      /* CYBER GRID BACKGROUND */
+      /* ===================================================== */
+
+      body::before {
+        content: "";
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        background-image:
+          linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+        background-size: 40px 40px;
+        pointer-events: none;
+        z-index: -1;
+      }
+
+      /* ===================================================== */
+      /* NAVIGATION BAR */
+      /* ===================================================== */
+
+      nav {
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 40px;
+        background: rgba(5, 5, 25, 0.75);
+        backdrop-filter: blur(14px);
+        border-bottom: 1px solid rgba(0, 224, 255, 0.15);
+        box-shadow: 0 2px 25px rgba(0, 224, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: "Orbitron", sans-serif;
+        font-size: 1.6rem;
+        font-weight: 600;
+        color: #00e0ff;
+        text-decoration: none;
+        position: relative;
+        text-shadow: 0 0 8px #00e0ff, 0 0 20px #00e0ff;
+        transition: 0.3s;
+      }
+
+      .logo-icon {
+        width: 22px;
+        height: 22px;
+        stroke: #00e0ff;
+        stroke-width: 2;
+        fill: none;
+        filter: drop-shadow(0 0 6px #00e0ff) drop-shadow(0 0 16px #00e0ff);
+      }
+
+      .logo::after {
+        content: "";
+        position: absolute;
+        left: 30px;
+        bottom: -4px;
+        width: 50px;
+        height: 2px;
+        background: #00e0ff;
+        box-shadow: 0 0 6px #00e0ff, 0 0 18px #00e0ff;
+      }
+
+      .logo:hover {
+        transform: scale(1.05);
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 24px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #cce6ff;
+        text-decoration: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 15px;
+        transition: 0.3s;
+      }
+
+      .nav-icon svg {
+        width: 16px;
+        height: 16px;
+        stroke: #cce6ff;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+        transition: 0.3s;
+      }
+
+      .nav-item:hover {
+        color: #00e0ff;
+        background: rgba(0, 224, 255, 0.08);
+        text-shadow: 0 0 8px #00e0ff, 0 0 18px #00e0ff;
+        transform: translateY(-1px);
+      }
+
+      .nav-item:hover .nav-icon svg {
+        stroke: #00e0ff;
+        filter: drop-shadow(0 0 6px #00e0ff) drop-shadow(0 0 14px #00e0ff);
+      }
+
+      .nav-item.active {
+        color: #00e0ff;
+        background: rgba(0, 224, 255, 0.12);
+        border: 1px solid rgba(0, 224, 255, 0.4);
+        box-shadow:
+          0 0 10px rgba(0, 224, 255, 0.6),
+          inset 0 0 10px rgba(0, 224, 255, 0.2);
+        text-shadow: 0 0 10px #00e0ff;
+      }
+
+      .nav-item.active .nav-icon svg {
+        stroke: #00e0ff;
+      }
+
+      .nav-scan {
+        position: absolute;
+        top: 0;
+        left: -200px;
+        width: 200px;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(0, 224, 255, 0.25),
+          transparent
+        );
+        animation: navScan 6s linear infinite;
+      }
+
+      @keyframes navScan {
+        0% { left: -200px; }
+        100% { left: 100%; }
+      }
+
+      /* ===================================================== */
+      /* LAYOUT COMPONENTS */
+      /* ===================================================== */
+
+      .container {
+        width: 92%;
+        max-width: 1300px;
+        margin: auto;
+        padding-top: 40px;
+      }
+
+      .card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(8px);
+        padding: 22px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        transition: 0.3s;
+      }
+
+      .card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 0 20px rgba(0, 224, 255, 0.3);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+      }
+
+      /* ===================================================== */
+      /* BUTTON SYSTEM */
+      /* ===================================================== */
+
+      .btn {
+        background: linear-gradient(90deg, #00e0ff, #6a5cff);
+        border: none;
+        padding: 12px 26px;
+        border-radius: 30px;
+        color: white;
+        cursor: pointer;
+        font-weight: 600;
+        transition: 0.3s;
+      }
+
+      .btn:hover {
+        box-shadow: 0 0 20px rgba(0, 224, 255, 0.5);
+        transform: translateY(-2px);
+      }
+
+      .btn-start {
+        background: linear-gradient(90deg, #00ff9c, #00c853);
+      }
+
+      .btn-start:hover {
+        box-shadow: 0 0 10px #00ff9c, 0 0 20px #00ff9c, 0 0 40px rgba(0,255,156,.6);
+        transform: translateY(-3px) scale(1.05);
+      }
+
+      .btn-stop {
+        background: linear-gradient(90deg, #ff4d4d, #ff0000);
+      }
+
+      .btn-stop:hover {
+        box-shadow: 0 0 10px #ff4d4d, 0 0 20px #ff4d4d, 0 0 40px rgba(255,0,0,.6);
+        transform: translateY(-3px) scale(1.05);
+      }
+
+      .btn-apply {
+        background: linear-gradient(90deg, #00e0ff, #0091ff);
+      }
+
+      .btn-apply:hover {
+        box-shadow: 0 0 10px #00e0ff, 0 0 20px #00e0ff, 0 0 40px rgba(0,224,255,.6);
+        transform: translateY(-3px) scale(1.05);
+      }
+
+      /* ===================================================== */
+      /* FOOTER */
+      /* ===================================================== */
+
+      footer {
+        text-align: center;
+        margin-top: 60px;
+        padding: 20px;
+        color: #888;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      /* ===================================================== */
+      /* PAGE TRANSITION OVERLAY */
+      /* ===================================================== */
+
+      #page-transition {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(4, 4, 20, 0.25);
+        backdrop-filter: blur(2px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 9999;
+        transition: opacity 0.35s ease;
+      }
+
+      #page-transition.active {
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      .transition-shield {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: shieldGrow 0.6s ease forwards;
+      }
+
+      .transition-shield svg {
+        width: 440px;
+        height: 440px;
+        stroke: #00e0ff;
+        stroke-width: 1.6;
+        fill: transparent;
+        filter: drop-shadow(0 0 15px #00e0ff) drop-shadow(0 0 40px #00e0ff)
+          drop-shadow(0 0 60px #00e0ff);
+        animation: shieldGlow 1.4s ease-in-out infinite;
+      }
+
+      .transition-shield::after {
+        content: "";
+        position: absolute;
+        width: 420px;
+        height: 420px;
+        border: 2px solid rgba(0, 224, 255, 0.35);
+        border-radius: 50%;
+        animation: scanWave 2s ease-out infinite, radarRotate 6s linear infinite;
+      }
+
+      .shield-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: "Orbitron";
+        font-size: 52px;
+        letter-spacing: 4px;
+        color: #00e0ff;
+        text-shadow: 0 0 10px #00e0ff, 0 0 30px #00e0ff, 0 0 60px #00e0ff;
+      }
+
+      /* ===================================================== */
+      /* TRANSITION ANIMATIONS */
+      /* ===================================================== */
+
+      @keyframes shieldGlow {
+        0%,100% { filter: drop-shadow(0 0 10px #00e0ff) drop-shadow(0 0 25px #00e0ff); }
+        50% { filter: drop-shadow(0 0 30px #00e0ff) drop-shadow(0 0 60px #00e0ff); }
+      }
+
+      @keyframes scanWave {
+        0% { transform: scale(.6); opacity:.8; }
+        70% { transform: scale(1.6); opacity:0; }
+        100% { opacity:0; }
+      }
+
+      @keyframes radarRotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      @keyframes shieldGrow {
+        0% { transform: scale(.3) rotate(-6deg); opacity:0; }
+        35% { transform: scale(1.25) rotate(2deg); opacity:1; }
+        65% { transform: scale(.95) rotate(-1deg); }
+        100% { transform: scale(1) rotate(0deg); }
+      }
+
+      /* ===================================================== */
+      /* AI ATTACK ALERT EFFECTS */
+      /* ===================================================== */
+
+      .ai-attack {
+        border: 1px solid rgba(255, 70, 70, 0.4);
+        box-shadow: 0 0 8px rgba(255,70,70,.4), 0 0 18px rgba(255,70,70,.25);
+        animation: aiPulse 2s ease-in-out infinite;
+      }
+
+      @keyframes aiPulse {
+        0%,100% {
+          box-shadow: 0 0 6px rgba(255,70,70,.2), 0 0 12px rgba(255,70,70,.15);
+        }
+        50% {
+          box-shadow: 0 0 12px rgba(255,70,70,.5), 0 0 30px rgba(255,70,70,.35);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- ===================================================== -->
+    <!-- TOP NAVIGATION BAR -->
+    <!-- ===================================================== -->
+    <nav>
+      <a href="/" class="logo">
+        <svg class="logo-icon" viewBox="0 0 24 24">
+          <path d="M12 2L19 5V11C19 16 15.5 19.5 12 21C8.5 19.5 5 16 5 11V5L12 2Z"/>
+        </svg>
+        <span class="logo-text">NIDS</span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="/" class="nav-item">Home</a></li>
+        <li><a href="/prediction" class="nav-item">Prediction</a></li>
+        <li><a href="/analysis" class="nav-item">Analysis</a></li>
+        <li><a href="/explainer" class="nav-item">Explainer</a></li>
+      </ul>
+
+      <div class="nav-scan"></div>
+    </nav>
+
+    <!-- ===================================================== -->
+    <!-- MAIN PAGE CONTENT -->
+    <!-- ===================================================== -->
+    <div class="container">
+      {% block content %}{% endblock %}
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- FOOTER -->
+    <!-- ===================================================== -->
+    <footer style="text-align:center;margin-top:60px;padding:24px 40px;
+  border-top:1px solid rgba(0,224,255,.08);
+  background:rgba(0,0,0,.2);">
+  <div style="display:flex;justify-content:center;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:10px;">
+    <span style="color:#334155;font-size:12px;">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                   background:#22c55e;box-shadow:0 0 6px #22c55e;margin-right:6px;
+                   animation:pulseDot 2s ease-in-out infinite;"></span>
+      System Online
+    </span>
+    <span style="color:#334155;font-size:12px;">🛡 NIDS Multiclass IDS</span>
+    <span style="color:#334155;font-size:12px;">🤖 RF + ISO + Meta Model</span>
+    <span style="color:#334155;font-size:12px;">🔬 35 Features · 8 Classes</span>
+    <span style="color:#334155;font-size:12px;">© 2026 AI Security Platform</span>
+  </div>
+  <div style="color:#1e293b;font-size:11px;">
+    Powered by Random Forest · Isolation Forest · SHAP Explainability
+  </div>
+</footer>
+<style>
+@keyframes pulseDot {
+  0%,100%{ box-shadow:0 0 4px #22c55e; }
+  50%{ box-shadow:0 0 10px #22c55e, 0 0 20px #22c55e; }
+}
+</style>
+
+    <!-- ===================================================== -->
+    <!-- PAGE SPECIFIC SCRIPTS -->
+    <!-- ===================================================== -->
+    {% block scripts %}{% endblock %}
+
+    <!-- ===================================================== -->
+    <!-- PAGE TRANSITION OVERLAY -->
+    <!-- ===================================================== -->
+    <div id="page-transition">
+      <div class="transition-shield">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2L19 5V11C19 16 15.5 19.5 12 21C8.5 19.5 5 16 5 11V5L12 2Z"/>
+        </svg>
+        <div class="shield-text">NIDS</div>
+      </div>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- PAGE TRANSITION CONTROLLER -->
+    <!-- ===================================================== -->
+    <script>
+      const links = document.querySelectorAll("a[href]");
+
+      links.forEach((link) => {
+        link.addEventListener("click", function (e) {
+          const url = this.getAttribute("href");
+          if (url.startsWith("#") || url.startsWith("javascript")) return;
+
+          e.preventDefault();
+          const transition = document.getElementById("page-transition");
+          transition.classList.add("active");
+
+          setTimeout(() => {
+            window.location = url;
+          }, 400);
+        });
+      });
+    </script>
+
+    <!-- ===================================================== -->
+    <!-- ACTIVE NAVIGATION HIGHLIGHTER -->
+    <!-- ===================================================== -->
+    <script>
+      const currentPath = window.location.pathname;
+
+      document.querySelectorAll(".nav-item").forEach((link) => {
+        if (link.getAttribute("href") === currentPath) {
+          link.classList.add("active");
+        }
+      });
+    </script>
+  </body>
+</html>

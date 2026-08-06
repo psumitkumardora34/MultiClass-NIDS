@@ -1,0 +1,999 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  /* ── Stat cards ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 900px) { .stats-row { grid-template-columns: repeat(2,1fr); } }
+  @media (max-width: 500px) { .stats-row { grid-template-columns: 1fr; } }
+
+  .stat-card {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 20px 22px;
+    transition: all .25s;
+  }
+  .stat-card h3 { margin:0 0 8px; font-size:13px; color:#64748b; text-transform:uppercase; letter-spacing:.8px; }
+  .stat-num     { font-size:40px; font-weight:700; margin:0; line-height:1; }
+
+  #totalCard:hover  { border-color:#38bdf8; box-shadow:0 0 18px rgba(56,189,248,.3); }
+  #benignCard:hover { border-color:#22c55e; box-shadow:0 0 18px rgba(34,197,94,.3); }
+  #attackCard:hover { border-color:#ef4444; box-shadow:0 0 18px rgba(239,68,68,.3); }
+  #threatCard:hover { border-color:#f59e0b; box-shadow:0 0 18px rgba(245,158,11,.3); }
+
+  .threat-badge {
+    display:inline-block; padding:4px 14px; border-radius:20px;
+    font-weight:700; font-size:15px; letter-spacing:1px;
+  }
+
+  /* ── Map card ── */
+  .map-card {
+    background: #0a0f1e;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 18px 20px 12px;
+    margin-top: 18px;
+  }
+
+  /* ── Two-column row ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 18px;
+  }
+  @media (max-width: 820px) { .two-col { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+
+  .section-title {
+    font-size:15px; font-weight:600; color:#38bdf8;
+    margin:0 0 12px; display:flex; align-items:center; gap:8px;
+  }
+
+  /* ── Live feed ── */
+  #live-feed {
+    height: 280px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    padding-right: 4px;
+  }
+  #live-feed::-webkit-scrollbar { width:4px; }
+  #live-feed::-webkit-scrollbar-track { background:transparent; }
+  #live-feed::-webkit-scrollbar-thumb { background:#1e293b; border-radius:4px; }
+  .feed-row {
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+    word-break: break-all;
+  }
+
+  /* ── AI card ── */
+  #ai-card {
+    background: #0f172a;
+    border: 1px solid rgba(56,189,248,.35);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-top: 18px;
+    box-shadow: 0 0 14px rgba(56,189,248,.12);
+    transition: all .3s;
+  }
+  #ai-card.ai-attack {
+    border-color: rgba(239,68,68,.6);
+    box-shadow: 0 0 20px rgba(239,68,68,.35);
+    animation: aiPulse 2s ease-in-out infinite;
+  }
+  @keyframes aiPulse {
+    0%,100%{ box-shadow:0 0 10px rgba(239,68,68,.2); }
+    50%{ box-shadow:0 0 28px rgba(239,68,68,.5); }
+  }
+
+  .ai-inner { display:grid; grid-template-columns:1fr; gap:20px; }
+  .ai-left  { font-family:monospace; line-height:1.9; }
+
+  /* ── SHAP bars ── */
+  .shap-title { font-size:12px; color:#64748b; margin-bottom:10px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; }
+  .shap-row   { display:flex; align-items:center; gap:8px; margin-bottom:7px; font-size:11px; }
+  .shap-name  { width:150px; flex-shrink:0; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .shap-bar-wrap { flex:1; background:rgba(255,255,255,.05); border-radius:4px; height:9px; overflow:hidden; }
+  .shap-bar   { height:9px; border-radius:4px; transition:width .4s ease; }
+  .shap-val   { width:55px; text-align:right; flex-shrink:0; font-family:monospace; color:#64748b; font-size:11px; }
+
+  /* ── Replay card ── */
+  #replayCard {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-top: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  #packetStream { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+  .packet {
+    position:absolute; width:6px; height:6px; background:#00e0ff;
+    border-radius:50%; box-shadow:0 0 8px #00e0ff;
+    animation: packetMove 2s linear forwards;
+  }
+  @keyframes packetMove {
+    0%  { left:-10px; opacity:0; }
+    10% { opacity:1; }
+    100%{ left:110%; opacity:0; }
+  }
+  #replayStatus { font-size:12px; color:#475569; margin-top:10px; font-family:monospace; }
+
+  /* ── Class pills ── */
+  #classDist { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+  .class-pill {
+    padding:3px 11px; border-radius:20px; font-size:12px; font-weight:600;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
+    display:flex; align-items:center; gap:5px;
+  }
+  .pill-dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
+
+  input[type=range] { width:100%; margin:6px 0 10px; accent-color:#00e0ff; }
+</style>
+
+<!-- ── Stat cards ── -->
+<div class="stats-row">
+  <div class="stat-card" id="totalCard">
+    <h3>Total Flows</h3>
+    <p class="stat-num" style="color:#38bdf8;" id="totalFlows">0</p>
+  </div>
+  <div class="stat-card" id="benignCard">
+    <h3>Normal</h3>
+    <p class="stat-num" style="color:#22c55e;" id="benignCount">0</p>
+  </div>
+  <div class="stat-card" id="attackCard">
+    <h3>Attacks</h3>
+    <p class="stat-num" style="color:#ef4444;" id="attackCounter">0</p>
+  </div>
+  <div class="stat-card" id="threatCard">
+    <h3>Threat Level</h3>
+    <div id="threatLevel" class="threat-badge" style="background:rgba(34,197,94,.12);color:#22c55e;">LOW</div>
+    <div style="margin-top:10px;font-size:12px;color:#64748b;">
+      Normal <span id="benignPercent" style="color:#22c55e;font-weight:600;">0%</span>
+      &nbsp;·&nbsp;
+      Attack <span id="attackPercent" style="color:#ef4444;font-weight:600;">0%</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── World Map ── -->
+<div class="map-card">
+  <div class="section-title">🌍 Global Cyber Attack Map</div>
+  <canvas id="worldMap" style="width:100%;height:420px;border-radius:8px;display:block;"></canvas>
+</div>
+
+<!-- ── Feed + Chart/Pills ── -->
+<div class="two-col">
+  <div class="panel">
+    <div class="section-title">📡 Live Attack Feed</div>
+    <div id="live-feed"></div>
+  </div>
+  <div class="panel">
+    <div class="section-title">📈 Attack Rate</div>
+    <canvas id="attackRateChart" style="max-height:200px;"></canvas>
+    <div class="section-title" style="margin-top:18px;">🔖 Class Distribution</div>
+    <div id="classDist"><span style="color:#475569;font-size:12px;">No flows yet</span></div>
+  </div>
+</div>
+
+<!-- ── AI Decision Engine + SHAP ── -->
+<div id="ai-card">
+  <div class="section-title">🤖 AI Decision Engine</div>
+  <div class="ai-inner">
+    <div class="ai-left">
+      <div id="ai-status" style="color:#38bdf8;font-size:13px;">Waiting for flows…</div>
+      <div id="ai-prediction" style="font-size:22px;font-weight:700;margin-top:4px;">Prediction: —</div>
+      <div id="ai-confidence" style="color:#94a3b8;font-size:13px;">Confidence: —</div>
+      <div id="ai-category"   style="color:#94a3b8;font-size:13px;margin-top:2px;">Category: —</div>
+      <div style="margin-top:12px;font-size:12px;color:#64748b;">Class probabilities:</div>
+      <div id="ai-proba" style="font-size:12px;color:#94a3b8;margin-top:4px;line-height:1.8;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Replay Controls ── -->
+<div id="replayCard">
+  <div id="packetStream"></div>
+  <div class="section-title">▶ Replay Controls</div>
+  <label style="color:#94a3b8;font-size:13px;">
+    Speed: <strong id="speedVal">5</strong>x (flows / sec)
+  </label>
+  <input type="range" id="replaySpeed" min="1" max="30" value="5"
+         oninput="document.getElementById('speedVal').textContent=this.value;
+                  sessionStorage.setItem('nids_speed',this.value);">
+  <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap;">
+    <button class="btn btn-start" id="startReplay">▶ Start Replay</button>
+    <button class="btn btn-stop"  id="stopReplay">⏹ Stop Replay</button>
+    <button class="btn" id="resetDashBtn"
+      style="background:rgba(100,116,139,.15);border:1px solid #334155;color:#64748b;
+             padding:8px 18px;border-radius:30px;cursor:pointer;font-size:14px;transition:.2s;"
+      onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444';"
+      onmouseout="this.style.borderColor='#334155';this.style.color='#64748b';">
+      🗑 Reset View
+    </button>
+  </div>
+  <div id="replayStatus">Ready.</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ═══════════════════════════════════════════════════════
+// Socket + State
+// ═══════════════════════════════════════════════════════
+const socket = io();
+let attackCount = 0, benignCount = 0, totalFlows = 0;
+
+// ── Restore state when page (re)loads while replay is running ────────────────
+socket.on('connect', async function(){
+  try {
+    const resp = await fetch('/api/session_stats');
+    if(resp.ok){
+      const s = await resp.json();
+      if(s.total > 0){
+        // Restore counters
+        totalFlows   = s.total   || 0;
+        attackCount  = s.attacks || 0;
+        benignCount  = s.normal  || 0;
+
+        // Restore class counts
+        CLASS_NAMES.forEach(c=>{ classCounts[c] = (s.class_counts && s.class_counts[c]) || 0; });
+        updatePills();
+
+        // Update stat cards
+        document.getElementById('totalFlows').textContent    = totalFlows;
+        document.getElementById('attackCounter').textContent = attackCount;
+        document.getElementById('benignCount').textContent   = benignCount;
+        document.getElementById('attackPercent').textContent=(attackCount/totalFlows*100).toFixed(1)+'%';
+        document.getElementById('benignPercent').textContent=(benignCount/totalFlows*100).toFixed(1)+'%';
+
+        // Restore threat badge
+        const tl=document.getElementById('threatLevel');
+        const ratio=attackCount/totalFlows;
+        if(ratio>0.4||attackCount>50)      {tl.textContent='CRITICAL';tl.style.cssText='background:rgba(239,68,68,.18);color:#ef4444;';}
+        else if(ratio>0.2||attackCount>20) {tl.textContent='HIGH';    tl.style.cssText='background:rgba(239,68,68,.12);color:#ef4444;';}
+        else if(ratio>0.1||attackCount>5)  {tl.textContent='MEDIUM';  tl.style.cssText='background:rgba(245,158,11,.12);color:#f59e0b;';}
+        else if(attackCount>0)             {tl.textContent='LOW';     tl.style.cssText='background:rgba(34,197,94,.12);color:#22c55e;';}
+
+        // Update replay status label
+        if(s.replay_running){
+          document.getElementById('replayStatus').textContent='▶ Replay in progress (rejoined session)…';
+          document.getElementById('startReplay').disabled=true;
+        }
+
+        console.log(`[NIDS] State restored — ${totalFlows} flows, ${attackCount} attacks`);
+      }
+    }
+  } catch(e){
+    console.warn('[NIDS] Could not restore session state:', e);
+  }
+
+  // ── Restore feed rows from sessionStorage (always, regardless of totals) ──
+  try{
+    const savedFeed = sessionStorage.getItem('nids_feed');
+    if(savedFeed){
+      const rows = JSON.parse(savedFeed);
+      const feed = document.getElementById('live-feed');
+      feed.innerHTML = rows.map(r=>`<div class="feed-row">${r}</div>`).join('');
+    }
+  }catch(e){}
+
+  // ── Restore chart data from sessionStorage (always) ─────────────────────
+  try{
+    const savedChart = sessionStorage.getItem('nids_chart');
+    if(savedChart){
+      const cd = JSON.parse(savedChart);
+      attackChart.data.labels             = cd.labels || [];
+      attackChart.data.datasets[0].data   = cd.atk    || [];
+      attackChart.data.datasets[1].data   = cd.nrm    || [];
+      attackChart.update();
+    }
+  }catch(e){}
+
+  // ── Restore speed slider from sessionStorage (always) ───────────────────
+  try{
+    const savedSpeed = sessionStorage.getItem('nids_speed');
+    if(savedSpeed){
+      const slider = document.getElementById('replaySpeed');
+      slider.value = savedSpeed;
+      document.getElementById('speedVal').textContent = savedSpeed;
+    }
+  }catch(e){}
+});
+
+const CLASS_NAMES = ['Bot','Bruteforce','DDoS','DoS','Infiltration','Normal','PortScan','WebAttack'];
+const CLASS_COLOURS = {
+  Normal:'#22c55e', Bot:'#ef4444', Bruteforce:'#f97316',
+  DDoS:'#ef4444', DoS:'#ef4444', Infiltration:'#a855f7',
+  PortScan:'#f59e0b', WebAttack:'#f97316'
+};
+const classCounts = {};
+CLASS_NAMES.forEach(c => classCounts[c] = 0);
+
+// ═══════════════════════════════════════════════════════
+// 3D Orthographic Globe  — pure Canvas 2D, no CDN
+// Renders a rotating sphere with land polygons projected
+// via orthographic projection (proper 3D, not flat map)
+// ═══════════════════════════════════════════════════════
+(function(){
+  const cv  = document.getElementById('worldMap');
+  const ctx = cv.getContext('2d');
+
+  // ── State ───────────────────────────────────────────
+  let rotY = 0.3;          // longitude rotation (radians)
+  let rotX = -0.18;        // latitude tilt
+  let isDrag = false, lastMX = 0, lastMY = 0;
+  let dots = [], arcs = [];
+  let R = 1;               // sphere radius in canvas px — set by resize()
+  let cx = 0, cy = 0;      // sphere centre
+
+  // ── Resize ──────────────────────────────────────────
+  function resize(){
+    cv.width  = cv.offsetWidth;
+    cv.height = cv.offsetHeight;
+    R  = Math.min(cv.width, cv.height) * 0.42;
+    cx = cv.width  / 2;
+    cy = cv.height / 2;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ── Mouse / touch drag to rotate ───────────────────
+  cv.style.cursor = 'grab';
+  cv.addEventListener('mousedown',  e=>{ isDrag=true; lastMX=e.clientX; lastMY=e.clientY; cv.style.cursor='grabbing'; });
+  cv.addEventListener('mouseup',    ()=>{ isDrag=false; cv.style.cursor='grab'; });
+  cv.addEventListener('mouseleave', ()=>{ isDrag=false; cv.style.cursor='grab'; });
+  cv.addEventListener('mousemove',  e=>{
+    if(!isDrag) return;
+    rotY += (e.clientX-lastMX)*0.005;
+    rotX -= (e.clientY-lastMY)*0.005;
+    rotX  = Math.max(-1.4, Math.min(1.4, rotX));
+    lastMX=e.clientX; lastMY=e.clientY;
+  });
+  cv.addEventListener('touchstart', e=>{ isDrag=true; lastMX=e.touches[0].clientX; lastMY=e.touches[0].clientY; }, {passive:true});
+  cv.addEventListener('touchend',   ()=>{ isDrag=false; });
+  cv.addEventListener('touchmove',  e=>{
+    if(!isDrag) return;
+    rotY += (e.touches[0].clientX-lastMX)*0.005;
+    rotX -= (e.touches[0].clientY-lastMY)*0.005;
+    rotX  = Math.max(-1.4, Math.min(1.4, rotX));
+    lastMX=e.touches[0].clientX; lastMY=e.touches[0].clientY;
+  }, {passive:true});
+
+  // ── 3D math ──────────────────────────────────────────
+  // Convert lat/lng (degrees) → unit 3D vector
+  function ll2xyz(lat, lng){
+    const la = lat*Math.PI/180, ln = lng*Math.PI/180;
+    return [Math.cos(la)*Math.cos(ln), Math.sin(la), Math.cos(la)*Math.sin(ln)];
+  }
+
+  // Rotate point [x,y,z] by rotY (around Y) then rotX (around X)
+  function rotate(p){
+    let [x,y,z] = p;
+    // Y-axis rotation (longitude spin)
+    const cy_=Math.cos(rotY), sy_=Math.sin(rotY);
+    let x2 =  x*cy_ + z*sy_;
+    let z2 = -x*sy_ + z*cy_;
+    x=x2; z=z2;
+    // X-axis rotation (tilt)
+    const cx_=Math.cos(rotX), sx_=Math.sin(rotX);
+    let y2 = y*cx_ - z*sx_;
+    let z3 = y*sx_ + z*cx_;
+    return [x, y2, z3];
+  }
+
+  // Project rotated unit vector → canvas pixel (orthographic)
+  // Returns null if point is on back-face (z < 0)
+  function project(lat, lng, clipBack){
+    const xyz  = ll2xyz(lat, lng);
+    const [x,y,z] = rotate(xyz);
+    if(clipBack && z < 0) return null;   // hidden by globe
+    return [cx + x*R, cy - y*R, z];     // [screenX, screenY, depth]
+  }
+
+  // ── Land polygon definitions (lat/lng) ──────────────
+  // Same continent data as before — now rendered in 3D
+  const LAND = [
+    // North America
+    [[72,-140],[60,-137],[55,-130],[50,-125],[42,-124],[38,-122],[33,-118],
+     [25,-109],[22,-105],[20,-104],[20,-87],[25,-80],[30,-81],[35,-76],
+     [40,-74],[42,-70],[45,-64],[50,-55],[55,-60],[60,-64],[65,-68],
+     [70,-55],[72,-65],[76,-80],[79,-75],[83,-85],[80,-110],[76,-130]],
+    // Greenland
+    [[61,-45],[72,-24],[83,-25],[84,-35],[75,-68],[70,-53]],
+    // South America
+    [[10,-73],[8,-60],[5,-52],[0,-50],[-5,-35],[-10,-37],[-23,-43],
+     [-35,-58],[-42,-64],[-55,-68],[-50,-50],[-40,-38],[-30,-50],
+     [-10,-37],[0,-50],[5,-52],[10,-62],[6,-77],[0,-80],[-5,-80],
+     [-10,-78],[-20,-70],[-30,-71],[-40,-73],[-50,-75],[-55,-70]],
+    // Europe
+    [[70,30],[65,14],[60,5],[56,8],[52,4],[50,2],[44,-2],[43,3],[41,-8],
+     [37,-9],[36,-5],[36,10],[40,18],[44,12],[48,16],[52,15],[56,10],
+     [60,5],[65,14],[68,18],[70,25],[71,28]],
+    // UK
+    [[50,-5],[51,-4],[53,-4],[55,-2],[57,0],[58,-3],[58,-5],[56,-6],[52,-5]],
+    // Scandinavia
+    [[58,5],[60,5],[65,14],[68,18],[70,25],[68,20],[64,10]],
+    // Africa
+    [[37,10],[36,10],[32,12],[30,32],[20,37],[12,44],[10,45],[0,42],
+     [-10,40],[-20,35],[-34,26],[-34,18],[-25,13],[-10,14],[-5,2],
+     [5,-2],[10,-15],[18,-16],[25,-15],[30,-10],[32,-8],[36,-5],[37,0]],
+    // Asia (main)
+    [[70,30],[60,55],[50,60],[55,65],[65,87],[70,100],[65,115],[58,100],
+     [52,80],[48,68],[45,60],[38,44],[35,45],[28,50],[22,58],[15,45],
+     [12,45],[10,45],[5,42],[5,35],[10,34],[15,40],[20,37],[25,33],
+     [30,32],[32,35],[37,36],[38,40],[38,45],[45,60],[52,80],[58,120],
+     [65,115],[68,110]],
+    // India
+    [[28,68],[22,68],[12,77],[8,77],[12,80],[18,84],[22,88],[25,88],[28,72]],
+    // SE Asia
+    [[22,98],[15,104],[8,100],[2,102],[1,104],[5,108],[12,109],[18,104]],
+    // Japan
+    [[45,142],[40,141],[35,136],[33,130],[34,129],[38,141],[44,142]],
+    // Australia
+    [[-15,130],[-22,114],[-32,116],[-38,140],[-38,147],[-33,151],
+     [-23,151],[-15,145],[-12,136],[-12,130]],
+    // New Zealand
+    [[-36,174],[-40,175],[-44,172],[-40,170]],
+    // Grid lines (lat)
+    [[-90,0],[-60,0],[-30,0],[0,0],[30,0],[60,0],[90,0]],
+  ];
+
+  // Pre-generate lat/lng grid lines for the graticule
+  const GRATICULE = [];
+  // Parallels every 30°
+  for(let lat=-60; lat<=60; lat+=30){
+    const seg=[];
+    for(let lng=-180; lng<=180; lng+=4) seg.push([lat,lng]);
+    GRATICULE.push(seg);
+  }
+  // Meridians every 30°
+  for(let lng=-180; lng<=180; lng+=30){
+    const seg=[];
+    for(let lat=-88; lat<=88; lat+=4) seg.push([lat,lng]);
+    GRATICULE.push(seg);
+  }
+
+  // ── Arc data (3D) ────────────────────────────────────
+  // Each arc: {la1,ln1,la2,ln2,color,t,spd,isAttack}
+  // Dots: {la,ln,color,life,isAttack}
+
+  // ── Draw helpers ─────────────────────────────────────
+  function drawPolyline(pts3d, strokeStyle, lineWidth, alpha){
+    const projected = pts3d.map(([la,ln])=>project(la,ln,false));
+    ctx.beginPath();
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth   = lineWidth;
+    ctx.globalAlpha = alpha;
+    let started = false, prevVisible = false;
+    projected.forEach((p,i)=>{
+      if(!p){ prevVisible=false; return; }
+      const [sx,sy,z] = p;
+      const visible = z >= -0.15;   // show slightly past limb for smooth cutoff
+      if(!started || !prevVisible){ ctx.moveTo(sx,sy); started=true; }
+      else ctx.lineTo(sx,sy);
+      prevVisible = visible;
+    });
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // Interpolate points along a great circle arc
+  function greatCirclePoints(la1,ln1,la2,ln2,steps){
+    const p1=ll2xyz(la1,ln1), p2=ll2xyz(la2,ln2);
+    const pts=[];
+    for(let i=0;i<=steps;i++){
+      const t=i/steps;
+      // Slerp
+      const dot=Math.max(-1,Math.min(1,p1[0]*p2[0]+p1[1]*p2[1]+p1[2]*p2[2]));
+      const omega=Math.acos(dot)||0.0001;
+      const s1=Math.sin((1-t)*omega)/Math.sin(omega);
+      const s2=Math.sin(t*omega)/Math.sin(omega);
+      const v=[p1[0]*s1+p2[0]*s2, p1[1]*s1+p2[1]*s2, p1[2]*s1+p2[2]*s2];
+      // Scale up (lift arc above surface)
+      const lift = 1 + 0.28*Math.sin(t*Math.PI);
+      pts.push([v[0]*lift, v[1]*lift, v[2]*lift]);
+    }
+    return pts;
+  }
+
+  // Draw a great-circle arc (already in xyz)
+  function drawArc3D(xyzPts, color, alpha, steps){
+    const rotated = xyzPts.map(([x,y,z])=>{
+      const [rx,ry,rz] = rotate([x,y,z]);
+      return [cx+rx*R, cy-ry*R, rz];
+    });
+    ctx.beginPath();
+    ctx.strokeStyle=color; ctx.lineWidth=1.8; ctx.globalAlpha=alpha;
+    let started=false, prev=true;
+    rotated.forEach(([sx,sy,z])=>{
+      const vis = z > -0.05;
+      if(!started||!prev){ ctx.moveTo(sx,sy); started=true; }
+      else ctx.lineTo(sx,sy);
+      prev=vis;
+    });
+    ctx.stroke(); ctx.globalAlpha=1;
+  }
+
+  // ── Main draw loop ────────────────────────────────────
+  function draw(){
+    resize();  // keep canvas sharp on resize
+    const w=cv.width, h=cv.height;
+    ctx.clearRect(0,0,w,h);
+
+    // Background
+    ctx.fillStyle='#020810'; ctx.fillRect(0,0,w,h);
+
+    // Outer space glow behind globe
+    const glow=ctx.createRadialGradient(cx,cy,R*0.8,cx,cy,R*1.4);
+    glow.addColorStop(0,'rgba(0,80,180,0.12)');
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow; ctx.fillRect(0,0,w,h);
+
+    // ── Globe base sphere ──────────────────────────────
+    // Radial gradient for ocean depth + light
+    const oceanGrad=ctx.createRadialGradient(cx-R*0.28,cy-R*0.28,R*0.05,cx,cy,R);
+    oceanGrad.addColorStop(0,'#0d2f5e');
+    oceanGrad.addColorStop(0.45,'#061a3a');
+    oceanGrad.addColorStop(1,'#020d20');
+    ctx.beginPath();
+    ctx.arc(cx,cy,R,0,Math.PI*2);
+    ctx.fillStyle=oceanGrad; ctx.fill();
+
+    // ── Graticule (grid lines on sphere) ─────────────
+    GRATICULE.forEach(seg=>{
+      drawPolyline(seg,'rgba(0,120,200,0.12)',0.8,1);
+    });
+
+    // ── Land polygons ─────────────────────────────────
+    LAND.forEach(poly=>{
+      drawPolyline(poly,'rgba(0,230,255,0.55)',1.3,1);
+    });
+
+    // ── Atmosphere rim ────────────────────────────────
+    const atmGrad=ctx.createRadialGradient(cx,cy,R*0.96,cx,cy,R*1.06);
+    atmGrad.addColorStop(0,'rgba(0,150,255,0.18)');
+    atmGrad.addColorStop(1,'rgba(0,50,150,0)');
+    ctx.beginPath(); ctx.arc(cx,cy,R*1.06,0,Math.PI*2);
+    ctx.fillStyle=atmGrad; ctx.fill();
+
+    // Bright limb highlight (specular)
+    const limb=ctx.createRadialGradient(cx-R*0.35,cy-R*0.35,0,cx-R*0.35,cy-R*0.35,R*0.7);
+    limb.addColorStop(0,'rgba(130,210,255,0.13)');
+    limb.addColorStop(1,'rgba(130,210,255,0)');
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2);
+    ctx.fillStyle=limb; ctx.fill();
+
+    // ── Attack arcs on globe surface ──────────────────
+    dots = dots.filter(d=>d.life>0);
+    arcs = arcs.filter(a=>a.t<=1);
+
+    arcs.forEach(a=>{
+      a.t = Math.min(a.t+a.spd, 1);
+      const visSteps = Math.floor(a.t * a.pts.length);
+      if(visSteps < 2) return;
+      const slice = a.pts.slice(0, visSteps);
+      drawArc3D(slice, a.color, 0.82, visSteps);
+      // Leading dot
+      const last=slice[slice.length-1];
+      const [rx,ry,rz]=rotate(last);
+      if(rz>0){
+        ctx.beginPath();
+        ctx.arc(cx+rx*R, cy-ry*R, 3, 0, Math.PI*2);
+        ctx.fillStyle=a.color; ctx.globalAlpha=0.95; ctx.fill();
+        ctx.globalAlpha=1;
+      }
+    });
+
+    // ── Attack dots (hit points) ──────────────────────
+    dots.forEach(d=>{
+      d.life -= 0.008;
+      const [x,y,z]=rotate(d.xyz);
+      if(z < 0) return;   // on back — don't draw
+      const sx=cx+x*R*1.01, sy=cy-y*R*1.01;
+      const a=Math.max(0,d.life);
+      ctx.beginPath(); ctx.arc(sx,sy,d.r,0,Math.PI*2);
+      ctx.fillStyle=d.color; ctx.globalAlpha=a; ctx.fill();
+      if(d.isAttack){
+        ctx.beginPath(); ctx.arc(sx,sy,d.r+(1-a)*18,0,Math.PI*2);
+        ctx.strokeStyle=d.color; ctx.lineWidth=1.2; ctx.globalAlpha=a*0.4; ctx.stroke();
+      }
+      ctx.globalAlpha=1;
+    });
+
+    // Auto-rotate when not dragging
+    if(!isDrag) rotY += 0.003;
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  // ── Public API ────────────────────────────────────────
+  window.mapAddFlow = function(sLat,sLng,dLat,dLng,color,isAttack){
+    const STEPS = 48;
+    const pts   = greatCirclePoints(sLat,sLng,dLat,dLng,STEPS);
+    arcs.push({pts,color,t:0,spd:0.018+Math.random()*0.012,isAttack});
+    dots.push({xyz:ll2xyz(sLat,sLng),color,life:1,r:isAttack?5:3,isAttack});
+    if(arcs.length>300) arcs.splice(0,60);
+    if(dots.length>600) dots.splice(0,120);
+  };
+  window.mapReset = function(){ dots=[]; arcs=[]; };
+})();
+
+// ═══════════════════════════════════════════════════════
+// Attack-rate chart
+// ═══════════════════════════════════════════════════════
+const attackChart=new Chart(document.getElementById('attackRateChart'),{
+  type:'line',
+  data:{labels:[],datasets:[
+    {label:'Attacks',data:[],borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,.08)',fill:true,tension:0.3,pointRadius:2},
+    {label:'Normal', data:[],borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,.05)', fill:true,tension:0.3,pointRadius:2}
+  ]},
+  options:{
+    animation:false,
+    scales:{x:{display:false},y:{beginAtZero:true,ticks:{color:'#475569'},grid:{color:'rgba(255,255,255,.04)'}}},
+    plugins:{legend:{labels:{color:'#64748b',font:{size:11}}}}
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// Class pills
+// ═══════════════════════════════════════════════════════
+function updatePills(){
+  const el=document.getElementById('classDist');
+  const html=CLASS_NAMES.filter(c=>classCounts[c]>0).map(c=>{
+    const col=CLASS_COLOURS[c]||'#888';
+    return `<div class="class-pill" style="border-color:${col}44;">
+      <span class="pill-dot" style="background:${col};box-shadow:0 0 5px ${col};"></span>
+      ${c} <strong style="color:${col};">${classCounts[c]}</strong></div>`;
+  }).join('');
+  el.innerHTML=html||'<span style="color:#475569;font-size:12px;">No flows yet</span>';
+}
+
+// ═══════════════════════════════════════════════════════
+// SHAP Waterfall Chart  (Canvas-rendered, professional)
+// Mimics shap.plots.waterfall — diverging bars from a
+// shared baseline, with cumulative running total shown
+// ═══════════════════════════════════════════════════════
+function renderShap(shapValues, isAttack){
+  const panel = document.getElementById('shap-panel');
+  if(!panel) return;
+
+  if(!shapValues || shapValues.length === 0){
+    panel.innerHTML = `<div style="color:#334155;font-size:12px;font-family:monospace;padding:8px 0;">
+      SHAP not available.<br>
+      <span style="color:#1e3a5f;">Run: <code style="color:#38bdf8;">pip install shap</code> then restart.</span>
+    </div>`;
+    return;
+  }
+
+  // ── Build / reuse canvas ──────────────────────────
+  let c = panel.querySelector('canvas');
+  if(!c){
+    panel.innerHTML = '';
+    c = document.createElement('canvas');
+    c.style.cssText = 'width:100%;display:block;border-radius:6px;';
+    panel.appendChild(c);
+  }
+
+  const DPR   = window.devicePixelRatio || 1;
+  const W_CSS = panel.clientWidth || 340;
+  const ROWS  = shapValues.length;
+  const ROW_H = 28;                          // px per row
+  const PAD   = { t:28, b:36, l:8, r:8 };
+  const H_CSS = PAD.t + ROWS*ROW_H + PAD.b;
+  const LABEL_W = 138;                       // left label column
+  const VAL_W   = 52;                        // right value column
+  const BAR_AREA_W = W_CSS - LABEL_W - VAL_W - PAD.l - PAD.r;
+
+  c.width  = W_CSS * DPR;
+  c.height = H_CSS * DPR;
+  c.style.height = H_CSS + 'px';
+  const g = c.getContext('2d');
+  g.scale(DPR, DPR);
+
+  // Colours
+  const C_BG      = 'transparent';
+  const C_ATK     = '#ef4444';   // red  — pushes toward attack / positive shap
+  const C_NRM     = '#22c55e';   // green — pushes toward normal / negative shap
+  const C_AXIS    = 'rgba(255,255,255,0.12)';
+  const C_TXT     = '#94a3b8';
+  const C_HEADING = '#64748b';
+  const C_CUMLINE = 'rgba(255,255,255,0.5)';
+
+  g.clearRect(0, 0, W_CSS, H_CSS);
+
+  // ── Compute bar positions ─────────────────────────
+  // Sort by absolute shap_value descending (matches waterfall standard)
+  const sorted = [...shapValues].sort((a,b)=>Math.abs(b.shap_value)-Math.abs(a.shap_value));
+  const total  = sorted.reduce((s,v)=>s+v.shap_value, 0);
+  const maxAbs = Math.max(...sorted.map(s=>Math.abs(s.shap_value)), 0.001);
+
+  // Bar axis origin = centre of BAR_AREA_W
+  const bx0 = PAD.l + LABEL_W;              // left edge of bar area
+  const bCtr = bx0 + BAR_AREA_W / 2;       // zero line x
+
+  // ── Column headings ───────────────────────────────
+  g.font = `bold 10px 'Courier New', monospace`;
+  g.fillStyle = C_HEADING;
+  g.textAlign  = 'right';
+  g.fillText('Feature', PAD.l + LABEL_W - 6, PAD.t - 8);
+  g.textAlign  = 'center';
+  g.fillText('← normal     attack →', bCtr, PAD.t - 8);
+  g.textAlign  = 'left';
+  g.fillText('SHAP', bx0 + BAR_AREA_W + 6, PAD.t - 8);
+
+  // ── Zero axis ─────────────────────────────────────
+  g.strokeStyle = C_AXIS;
+  g.lineWidth   = 1;
+  g.setLineDash([3,3]);
+  g.beginPath();
+  g.moveTo(bCtr, PAD.t - 14);
+  g.lineTo(bCtr, PAD.t + ROWS*ROW_H + 4);
+  g.stroke();
+  g.setLineDash([]);
+
+  // ── Draw rows ─────────────────────────────────────
+  let cumulative = 0;
+  const cumulativeX = [];   // track running total for connecting lines
+
+  sorted.forEach((s, i)=>{
+    const y = PAD.t + i * ROW_H;
+    const barPx  = (Math.abs(s.shap_value) / maxAbs) * (BAR_AREA_W/2 - 2);
+    const isPos  = s.shap_value > 0;    // positive = pushes toward attack
+    const col    = isPos ? C_ATK : C_NRM;
+
+    // Alternating row background
+    if(i % 2 === 0){
+      g.fillStyle = 'rgba(255,255,255,0.02)';
+      g.fillRect(0, y, W_CSS, ROW_H);
+    }
+
+    // ── Bar (starts from zero axis, extends right/left) ──
+    const barX = isPos ? bCtr : bCtr - barPx;
+    g.fillStyle = col;
+    g.globalAlpha = 0.82;
+    const bH = ROW_H * 0.52;
+    const bY = y + (ROW_H - bH)/2;
+    // Rounded bar
+    g.beginPath();
+    if(g.roundRect){ g.roundRect(barX, bY, barPx, bH, 3); }
+    else { g.rect(barX, bY, barPx, bH); }
+    g.fill();
+    g.globalAlpha = 1;
+
+    // Bar glow
+    g.shadowColor  = col;
+    g.shadowBlur   = 6;
+    g.fillStyle    = col;
+    g.globalAlpha  = 0.25;
+    g.beginPath();
+    g.rect(barX, bY, barPx, bH);
+    g.fill();
+    g.shadowBlur   = 0;
+    g.globalAlpha  = 1;
+
+    // ── Cumulative connector line ──────────────────
+    cumulative += s.shap_value;
+    const cumX = bCtr + (cumulative / maxAbs) * (BAR_AREA_W/2 - 2);
+    cumulativeX.push(cumX);
+    if(i > 0){
+      g.strokeStyle = C_CUMLINE;
+      g.lineWidth   = 1.2;
+      g.beginPath();
+      g.moveTo(cumulativeX[i-1], y);
+      g.lineTo(cumX, y);
+      g.stroke();
+    }
+    // Small cumulative dot
+    g.beginPath();
+    g.arc(cumX, y + ROW_H/2, 2.5, 0, Math.PI*2);
+    g.fillStyle = '#ffffff'; g.globalAlpha = 0.7; g.fill(); g.globalAlpha=1;
+
+    // ── Feature label ─────────────────────────────
+    g.fillStyle  = C_TXT;
+    g.font       = '11px "Courier New", monospace';
+    g.textAlign  = 'right';
+    g.textBaseline = 'middle';
+    // Truncate long names
+    let name = s.feature;
+    while(g.measureText(name).width > LABEL_W - 10 && name.length > 4)
+      name = name.slice(0,-1);
+    if(name !== s.feature) name += '…';
+    g.fillText(name, PAD.l + LABEL_W - 6, y + ROW_H/2);
+
+    // ── SHAP value ────────────────────────────────
+    const sign = isPos ? '+' : '−';
+    g.fillStyle  = col;
+    g.textAlign  = 'left';
+    g.font       = 'bold 10px "Courier New", monospace';
+    g.fillText(`${sign}${Math.abs(s.shap_value).toFixed(3)}`, bx0 + BAR_AREA_W + 6, y + ROW_H/2);
+  });
+
+  // ── Footer: total SHAP & legend ───────────────────
+  const fy = PAD.t + ROWS*ROW_H + 12;
+  g.font      = '10px "Courier New", monospace';
+  g.textAlign = 'left';
+  g.fillStyle = '#475569';
+  g.fillText(`Σ = ${total>=0?'+':''}${total.toFixed(3)}  `, PAD.l, fy);
+  g.fillStyle = C_ATK;
+  g.fillText('▮ attack', PAD.l + 58, fy);
+  g.fillStyle = C_NRM;
+  g.fillText('▮ normal', PAD.l + 116, fy);
+  g.fillStyle = '#334155';
+  g.fillText('— cumulative', PAD.l + 178, fy);
+}
+
+// ═══════════════════════════════════════════════════════
+// flow_result handler
+// ═══════════════════════════════════════════════════════
+socket.on('flow_result',function(d){
+  const isAttack=d.is_attack;
+  const labelStr=d.label_str||(isAttack?'Attack':'Normal');
+  const colour=d.colour||(isAttack?'#ef4444':'#22c55e');
+  const score=d.attack_score||0, conf=d.confidence||0;
+
+  totalFlows++; if(isAttack)attackCount++; else benignCount++;
+  if(classCounts.hasOwnProperty(labelStr))classCounts[labelStr]++;
+  updatePills();
+
+  document.getElementById('totalFlows').textContent=totalFlows;
+  document.getElementById('attackCounter').textContent=attackCount;
+  document.getElementById('benignCount').textContent=benignCount;
+  document.getElementById('attackPercent').textContent=(attackCount/totalFlows*100).toFixed(1)+'%';
+  document.getElementById('benignPercent').textContent=(benignCount/totalFlows*100).toFixed(1)+'%';
+
+  const tl=document.getElementById('threatLevel');
+  const ratio=attackCount/totalFlows;
+  if(ratio>0.4||attackCount>50)      {tl.textContent='CRITICAL';tl.style.cssText='background:rgba(239,68,68,.18);color:#ef4444;';}
+  else if(ratio>0.2||attackCount>20) {tl.textContent='HIGH';    tl.style.cssText='background:rgba(239,68,68,.12);color:#ef4444;';}
+  else if(ratio>0.1||attackCount>5)  {tl.textContent='MEDIUM';  tl.style.cssText='background:rgba(245,158,11,.12);color:#f59e0b;';}
+  else                                {tl.textContent='LOW';     tl.style.cssText='background:rgba(34,197,94,.12);color:#22c55e;';}
+
+  const geo=d.geo||{};
+  mapAddFlow(geo.lat||0,geo.lon||0,(Math.random()*140)-70,(Math.random()*360)-180,colour,isAttack);
+
+  const feed=document.getElementById('live-feed');
+  const ts=new Date().toLocaleTimeString();
+  const row=document.createElement('div'); row.className='feed-row';
+  row.innerHTML=
+    `<span style="color:#334155;">[${ts}]</span> `+
+    `<span style="color:#64748b;">${d.src_ip} → ${d.dst_ip}</span> `+
+    `<span style="font-weight:700;color:${colour};">[${labelStr}]</span> `+
+    `<span style="color:#475569;">score=${score.toFixed(3)} conf=${(conf*100).toFixed(1)}%</span>`;
+  feed.prepend(row);
+  if(feed.children.length>150)feed.removeChild(feed.lastChild);
+  // Persist last 50 feed rows so they survive page navigation
+  try{
+    const rows=Array.from(feed.children).slice(0,50).map(r=>r.innerHTML);
+    sessionStorage.setItem('nids_feed',JSON.stringify(rows));
+  }catch(e){}
+
+  attackChart.data.labels.push('');
+  attackChart.data.datasets[0].data.push(attackCount);
+  attackChart.data.datasets[1].data.push(benignCount);
+  if(attackChart.data.labels.length>50){
+    attackChart.data.labels.shift();
+    attackChart.data.datasets.forEach(ds=>ds.data.shift());
+  }
+  attackChart.update();
+  // Persist chart data so it survives page navigation
+  try{sessionStorage.setItem('nids_chart',JSON.stringify({
+    labels: attackChart.data.labels,
+    atk:    attackChart.data.datasets[0].data,
+    nrm:    attackChart.data.datasets[1].data,
+  }));}catch(e){}
+
+  const aiCard=document.getElementById('ai-card');
+  document.getElementById('ai-status').textContent='Last flow analysed:';
+  document.getElementById('ai-prediction').innerHTML=`Prediction: <span style="color:${colour};">${labelStr}</span>`;
+  document.getElementById('ai-confidence').textContent=`Confidence: ${(conf*100).toFixed(1)}%  ·  Attack Score: ${(score*100).toFixed(1)}%`;
+  document.getElementById('ai-category').textContent=`Category: ${isAttack?'⚠️ THREAT DETECTED':'✅ Normal Traffic'}`;
+
+  if(d.class_proba&&Object.keys(d.class_proba).length){
+    const sorted=Object.entries(d.class_proba).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    document.getElementById('ai-proba').innerHTML=sorted.map(([cls,prob])=>{
+      const c=CLASS_COLOURS[cls]||'#888';
+      return `<span style="margin-right:12px;"><span style="color:${c};">${cls}</span>: ${(prob*100).toFixed(1)}%</span>`;
+    }).join('');
+  }
+
+  renderShap(d.shap_values||[], isAttack);
+  if(isAttack)aiCard.classList.add('ai-attack'); else aiCard.classList.remove('ai-attack');
+});
+
+// ═══════════════════════════════════════════════════════
+// Replay socket events
+// ═══════════════════════════════════════════════════════
+socket.on('replay_started',d=>{document.getElementById('replayStatus').textContent=`▶ Replaying ${d.total} flows…`;});
+socket.on('replay_done',d=>{
+  document.getElementById('replayStatus').textContent=`✅ Complete — ${d.processed}/${d.total} flows.`;
+  document.getElementById('startReplay').disabled=false;
+  clearInterval(_pktTimer);_pktTimer=null;
+  document.getElementById('packetStream').innerHTML='';
+});
+socket.on('replay_stopped',()=>{
+  document.getElementById('replayStatus').textContent='⏹ Stopped.';
+  document.getElementById('startReplay').disabled=false;
+  clearInterval(_pktTimer);_pktTimer=null;
+  document.getElementById('packetStream').innerHTML='';
+});
+socket.on('replay_error',d=>{
+  document.getElementById('replayStatus').textContent='❌ '+d.message;
+  document.getElementById('startReplay').disabled=false;
+});
+socket.on('error',d=>console.error('[SOCKET]',d.message));
+
+// ═══════════════════════════════════════════════════════
+// Packet animation
+// ═══════════════════════════════════════════════════════
+let _pktTimer=null;
+function spawnPacket(){
+  const stream=document.getElementById('packetStream');
+  const p=document.createElement('div'); p.className='packet';
+  p.style.top=Math.random()*100+'%';
+  stream.appendChild(p); setTimeout(()=>p.remove(),2000);
+}
+
+// ═══════════════════════════════════════════════════════
+// Replay buttons
+// ═══════════════════════════════════════════════════════
+document.getElementById('startReplay').onclick=function(){
+  // Flows now accumulate across replays — feed/chart/counters are only
+  // cleared by the explicit "Reset View" button, not on every start.
+  const spd=parseFloat(document.getElementById('replaySpeed').value);
+  socket.emit('start_replay',{speed:spd});
+  document.getElementById('replayStatus').textContent=`Starting at ${spd}x…`;
+  this.disabled=true;
+  spawnPacket();
+  if(!_pktTimer)_pktTimer=setInterval(spawnPacket,150);
+};
+document.getElementById('stopReplay').onclick=()=>socket.emit('stop_replay');
+document.getElementById('resetDashBtn').onclick=()=>{
+  socket.emit('reset_session');   // clears server-side counters + DB (used by Analysis page)
+  resetDashboard();               // clears this page's own UI/state
+};
+
+// ═══════════════════════════════════════════════════════
+// Dashboard reset
+// ═══════════════════════════════════════════════════════
+function resetDashboard(){
+  attackCount=0;benignCount=0;totalFlows=0;
+  CLASS_NAMES.forEach(c=>classCounts[c]=0);
+  updatePills();
+  ['attackCounter','benignCount','totalFlows'].forEach(id=>document.getElementById(id).textContent='0');
+  document.getElementById('attackPercent').textContent='0%';
+  document.getElementById('benignPercent').textContent='0%';
+  document.getElementById('live-feed').innerHTML='';
+  mapReset();
+  attackChart.data.labels=[];
+  attackChart.data.datasets.forEach(ds=>ds.data=[]);
+  attackChart.update();
+  document.getElementById('ai-card').classList.remove('ai-attack');
+  document.getElementById('ai-status').textContent='Waiting for flows…';
+  document.getElementById('ai-prediction').textContent='Prediction: —';
+  document.getElementById('ai-confidence').textContent='Confidence: —';
+  document.getElementById('ai-category').textContent='Category: —';
+  document.getElementById('ai-proba').textContent='';
+  // Clear persisted state so restored page also shows fresh dashboard
+  sessionStorage.removeItem('nids_feed');
+  sessionStorage.removeItem('nids_chart');
+  sessionStorage.removeItem('nids_speed');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  /* ── Page title ── */
+  .page-title {
+    font-family:'Orbitron',sans-serif; color:#00e0ff; font-size:22px; margin-bottom:6px;
+  }
+  .page-sub { color:#475569; font-size:13px; margin-bottom:22px; }
+
+  /* ── Metric grid: strict 4 columns, 2 rows = 8 cards ── */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  @media(max-width:900px){ .metrics-grid{ grid-template-columns:repeat(2,1fr); } }
+  @media(max-width:500px){ .metrics-grid{ grid-template-columns:1fr; } }
+
+  .m-card {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .25s, box-shadow .25s;
+  }
+  .m-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background: var(--accent, linear-gradient(90deg,#00e0ff,#6a5cff));
+    opacity:.7;
+  }
+  .m-card:hover { border-color:#334155; box-shadow:0 0 18px rgba(0,224,255,.08); }
+
+  .m-label {
+    font-size:11px; color:#64748b; text-transform:uppercase;
+    letter-spacing:1px; font-weight:600; margin-bottom:8px;
+  }
+  .m-value { font-size:32px; font-weight:800; line-height:1; margin-bottom:4px; }
+  .m-sub   { font-size:11px; color:#475569; }
+
+  /* Accent colours per card */
+  .acc-blue   { --accent:#00e0ff; }
+  .acc-purple { --accent:#6a5cff; }
+  .acc-green  { --accent:#22c55e; }
+  .acc-red    { --accent:#ef4444; }
+  .acc-amber  { --accent:#f59e0b; }
+  .acc-teal   { --accent:#14b8a6; }
+  .acc-pink   { --accent:#ec4899; }
+  .acc-indigo { --accent:#818cf8; }
+
+  /* ── Charts grid: 2 equal columns ── */
+  .charts-2col {
+    display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:22px;
+  }
+  @media(max-width:820px){ .charts-2col{ grid-template-columns:1fr; } }
+
+  /* ── Card ── */
+  .panel {
+    background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:20px 22px;
+  }
+  .panel-title {
+    font-size:14px; font-weight:700; color:#38bdf8; margin:0 0 4px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .panel-sub { font-size:11px; color:#475569; margin:0 0 14px; }
+
+  /* ── Confusion matrix ── */
+  .cm-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:360px;
+  }
+  .cm-cell {
+    padding:16px 12px; border-radius:10px; text-align:center;
+  }
+  .cm-val { font-size:26px; font-weight:800; }
+  .cm-lbl { font-size:10px; color:#94a3b8; margin-top:4px; }
+
+  /* ── IP table ── */
+  .ip-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .ip-table th {
+    color:#475569; text-align:left; padding:7px 8px;
+    border-bottom:1px solid rgba(255,255,255,.07); font-size:11px; text-transform:uppercase;
+  }
+  .ip-table td { padding:7px 8px; border-bottom:1px solid rgba(255,255,255,.03); }
+
+  /* ── Feature bars ── */
+  .feat-row  { margin:7px 0; }
+  .feat-name { font-size:11px; color:#94a3b8; margin-bottom:3px; display:flex; justify-content:space-between; }
+  .feat-bg   { background:rgba(255,255,255,.05); border-radius:4px; height:7px; }
+  .feat-fill { height:7px; border-radius:4px; background:linear-gradient(90deg,#00e0ff,#6a5cff); }
+
+  /* ── Refresh button ── */
+  #refreshBtn {
+    background:linear-gradient(90deg,#00e0ff,#6a5cff);
+    border:none; padding:10px 22px; border-radius:30px;
+    color:#020617; font-weight:700; font-size:13px; cursor:pointer;
+    transition:.25s; margin-bottom:18px;
+  }
+  #refreshBtn:hover { box-shadow:0 0 18px rgba(0,224,255,.5); transform:translateY(-2px); }
+  #refreshBtn:disabled { opacity:.6; transform:none; }
+
+  .status-badge {
+    display:inline-block; padding:4px 13px; border-radius:20px;
+    font-size:12px; margin-bottom:16px;
+  }
+
+  /* ── Trend indicator ── */
+  .trend { font-size:12px; margin-top:4px; }
+  .trend.good { color:#22c55e; }
+  .trend.bad  { color:#ef4444; }
+  .trend.warn { color:#f59e0b; }
+</style>
+
+<!-- ── Header ── -->
+<h1 class="page-title">📊 AI Traffic Analysis Dashboard</h1>
+<p class="page-sub">Real-time model performance metrics, computed from all flows processed in this session</p>
+
+<button id="refreshBtn" onclick="loadMetrics()">🔄 Refresh Metrics</button>
+<div id="statusBadge"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     METRIC CARDS — strict 4 × 2 grid
+     Row 1: Accuracy · Precision · Recall · F1 Score
+     Row 2: Detection Rate · False Positive Rate · Attack Rate · Throughput
+     ══════════════════════════════════════════════════════════ -->
+<div class="metrics-grid">
+
+  <!-- Row 1 -->
+  <div class="m-card acc-blue">
+    <div class="m-label">Accuracy</div>
+    <div class="m-value" id="accVal" style="color:#00e0ff;">--</div>
+    <div class="m-sub">Correct predictions / total flows</div>
+    <div class="trend" id="accTrend"></div>
+  </div>
+
+  <div class="m-card acc-purple">
+    <div class="m-label">Precision</div>
+    <div class="m-value" id="precVal" style="color:#818cf8;">--</div>
+    <div class="m-sub">True attacks / all flagged attacks</div>
+    <div class="trend" id="precTrend"></div>
+  </div>
+
+  <div class="m-card acc-teal">
+    <div class="m-label">Recall</div>
+    <div class="m-value" id="recVal" style="color:#14b8a6;">--</div>
+    <div class="m-sub">Attacks caught / total real attacks</div>
+    <div class="trend" id="recTrend"></div>
+  </div>
+
+  <div class="m-card acc-indigo">
+    <div class="m-label">F1 Score</div>
+    <div class="m-value" id="f1Val" style="color:#818cf8;">--</div>
+    <div class="m-sub">Harmonic mean of precision &amp; recall</div>
+    <div class="trend" id="f1Trend"></div>
+  </div>
+
+  <!-- Row 2 -->
+  <div class="m-card acc-green">
+    <div class="m-label">Detection Rate</div>
+    <div class="m-value" id="drVal" style="color:#22c55e;">--</div>
+    <div class="m-sub">= Recall (sensitivity)</div>
+    <div class="trend" id="drTrend"></div>
+  </div>
+
+  <div class="m-card acc-red">
+    <div class="m-label">False Positive Rate</div>
+    <div class="m-value" id="fprVal" style="color:#ef4444;">--</div>
+    <div class="m-sub">Normal flows incorrectly flagged</div>
+    <div class="trend" id="fprTrend"></div>
+  </div>
+
+  <div class="m-card acc-amber">
+    <div class="m-label">Attack Rate</div>
+    <div class="m-value" id="atkRateVal" style="color:#f59e0b;">--</div>
+    <div class="m-sub">% of flows classified as attack</div>
+    <div class="trend" id="atkTrend"></div>
+  </div>
+
+  <div class="m-card acc-pink">
+    <div class="m-label">Missed Attacks</div>
+    <div class="m-value" id="missVal" style="color:#ec4899;">--</div>
+    <div class="m-sub">False negatives (FN) — undetected</div>
+    <div class="trend" id="missTrend"></div>
+  </div>
+
+</div>
+
+
+
+<!-- ── ROC + PR Curves ── -->
+<div class="charts-2col">
+  <div class="panel">
+    <div class="panel-title">
+      <span>📈 ROC Curve</span>
+      <span id="rocAucBadge" style="margin-left:auto;font-size:12px;font-weight:700;color:#00e0ff;
+            background:rgba(0,224,255,.1);border:1px solid rgba(0,224,255,.3);border-radius:20px;
+            padding:3px 12px;">AUC: --</span>
+    </div>
+    <div class="panel-sub">Higher area = better attack/normal separation. Perfect model hugs the top-left corner.</div>
+    <canvas id="rocChart"></canvas>
+  </div>
+  <div class="panel">
+    <div class="panel-title">
+      <span>🎯 Precision-Recall Curve</span>
+      <span id="prAucBadge" style="margin-left:auto;font-size:12px;font-weight:700;color:#a78bfa;
+            background:rgba(106,92,255,.1);border:1px solid rgba(106,92,255,.35);border-radius:20px;
+            padding:3px 12px;">AUC: --</span>
+    </div>
+    <div class="panel-sub">High precision + high recall = fewer false alarms and fewer missed attacks.</div>
+    <canvas id="prChart"></canvas>
+  </div>
+</div>
+
+<!-- ── Class Distribution + Confusion Matrix ── -->
+<div class="charts-2col">
+  <div class="panel">
+    <div class="panel-title">🔖 Attack Class Distribution</div>
+    <div class="panel-sub">How many flows were classified into each of the 8 traffic categories</div>
+    <canvas id="classChart" style="max-height:280px;"></canvas>
+  </div>
+  <div class="panel">
+    <div class="panel-title">📦 Binary Confusion Matrix</div>
+    <div class="panel-sub">Normal vs Attack — 2×2 breakdown of model decisions vs ground truth</div>
+    <div class="cm-grid">
+      <div class="cm-cell" style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);">
+        <div class="cm-val" style="color:#22c55e;" id="cm-tn">--</div>
+        <div class="cm-lbl">✅ True Normal<br>(correctly safe)</div>
+      </div>
+      <div class="cm-cell" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);">
+        <div class="cm-val" style="color:#ef4444;" id="cm-fp">--</div>
+        <div class="cm-lbl">🔴 False Alarm<br>(safe → flagged)</div>
+      </div>
+      <div class="cm-cell" style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);">
+        <div class="cm-val" style="color:#f59e0b;" id="cm-fn">--</div>
+        <div class="cm-lbl">⚠️ Missed Attack<br>(attack → missed)</div>
+      </div>
+      <div class="cm-cell" style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);">
+        <div class="cm-val" style="color:#3b82f6;" id="cm-tp">--</div>
+        <div class="cm-lbl">🛡 Caught Attack<br>(correctly flagged)</div>
+      </div>
+    </div>
+    <div style="margin-top:14px;padding:10px 12px;background:rgba(0,0,0,.2);border-radius:8px;font-size:11px;color:#475569;line-height:1.7;">
+      <strong style="color:#64748b;">How to read this:</strong><br>
+      <span style="color:#22c55e;">Top-left (TN)</span> + <span style="color:#3b82f6;">Bottom-right (TP)</span> = correct decisions.<br>
+      <span style="color:#ef4444;">Top-right (FP)</span> = wasted analyst time (false alarms).<br>
+      <span style="color:#f59e0b;">Bottom-left (FN)</span> = <strong style="color:#f59e0b;">dangerous</strong> — attacks that slipped through.
+    </div>
+  </div>
+</div>
+
+<!-- ── Top IPs + Feature Importance ── -->
+<div class="charts-2col">
+  <div class="panel">
+    <div class="panel-title">🌐 Top Attacking Source IPs</div>
+    <div class="panel-sub">IP addresses that generated the most attack-classified flows</div>
+    <table class="ip-table">
+      <thead>
+        <tr>
+          <th>#</th><th>IP Address</th><th>Attack Flows</th><th>Threat Bar</th>
+        </tr>
+      </thead>
+      <tbody id="topIpsBody">
+        <tr><td colspan="4" style="color:#475569;padding:12px 8px;">No attack flows recorded yet</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <div class="panel-title">🔬 Top Discriminating Features</div>
+    <div class="panel-sub">Features with the largest mean difference between attack and normal flows</div>
+    <div id="topFeatures"><div style="color:#475569;font-size:13px;">No data yet</div></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let rocChart=null, prChart=null, classChart=null;
+
+// Area-under-curve via the trapezoidal rule. Pairs (x,y), sorts by x ascending,
+// then sums trapezoid areas between consecutive points — works for both the
+// ROC curve (x=FPR, y=TPR) and the PR curve (x=Recall, y=Precision).
+function trapzAUC(xs, ys){
+  if(!xs || !ys || xs.length<2) return 0;
+  const pts = xs.map((x,i)=>[x,ys[i]]).sort((a,b)=>a[0]-b[0]);
+  let area=0;
+  for(let i=1;i<pts.length;i++){
+    const [x0,y0]=pts[i-1], [x1,y1]=pts[i];
+    area += (x1-x0)*(y0+y1)/2;
+  }
+  return area;
+}
+
+const CLASS_NAMES  = ['Bot','Bruteforce','DDoS','DoS','Infiltration','Normal','PortScan','WebAttack'];
+const CLASS_COLORS = ['#ef4444','#f97316','#ef4444','#ef4444','#a855f7','#22c55e','#f59e0b','#f97316'];
+
+// ── Trend indicator helper ────────────────────────────────────────────────────
+function trend(id, val, goodHigh=true, warn=0.8, bad=0.5){
+  const el=document.getElementById(id);
+  if(!el||val===null) return;
+  if(goodHigh){
+    if(val>=warn) el.innerHTML=`<span class="trend good">▲ Good</span>`;
+    else if(val>=bad) el.innerHTML=`<span class="trend warn">◆ Fair</span>`;
+    else el.innerHTML=`<span class="trend bad">▼ Poor</span>`;
+  } else {
+    if(val<=1-warn) el.innerHTML=`<span class="trend good">▼ Low (good)</span>`;
+    else if(val<=1-bad) el.innerHTML=`<span class="trend warn">◆ Moderate</span>`;
+    else el.innerHTML=`<span class="trend bad">▲ High (bad)</span>`;
+  }
+}
+
+async function loadMetrics(){
+  const btn=document.getElementById('refreshBtn');
+  btn.textContent='⏳ Loading…'; btn.disabled=true;
+  try{
+    const d=await (await fetch('/api/metrics_data')).json();
+    renderMetrics(d);
+  }catch(e){
+    console.error(e);
+    document.getElementById('statusBadge').innerHTML=
+      '<span class="status-badge" style="background:rgba(239,68,68,.15);color:#f87171;">❌ Error loading metrics</span>';
+  }finally{
+    btn.textContent='🔄 Refresh Metrics'; btn.disabled=false;
+  }
+}
+
+function renderMetrics(d){
+  const badge=document.getElementById('statusBadge');
+  if(d.status==='no_data'){
+    badge.innerHTML='<span class="status-badge" style="background:rgba(245,158,11,.1);color:#fbbf24;">⚠️ No predictions yet — run a replay first</span>';
+    return;
+  }
+  badge.innerHTML=`<span class="status-badge" style="background:rgba(34,197,94,.1);color:#86efac;">✅ ${d.count} flows analysed</span>`;
+
+  const pct=v=>(v*100).toFixed(1)+'%';
+  const bm=d.basic_metrics;
+  const cm=d.confusion_matrix;
+
+  // ── Row 1 metric cards ─────────────────────────────────────────────────────
+  document.getElementById('accVal').textContent  = pct(bm.accuracy);
+  document.getElementById('precVal').textContent = pct(bm.precision);
+  document.getElementById('recVal').textContent  = pct(bm.recall);
+  document.getElementById('f1Val').textContent   = pct(bm.f1);
+  trend('accTrend',  bm.accuracy,  true);
+  trend('precTrend', bm.precision, true);
+  trend('recTrend',  bm.recall,    true);
+  trend('f1Trend',   bm.f1,        true);
+
+  // ── Row 2 metric cards ─────────────────────────────────────────────────────
+  document.getElementById('drVal').textContent  = pct(d.detection_rate);
+  document.getElementById('fprVal').textContent = pct(d.fpr);
+  trend('drTrend',  d.detection_rate, true);
+  trend('fprTrend', d.fpr,            false);
+
+  // Attack Rate = (TP + FP) / total as %
+  const total = (cm.tn||0)+(cm.fp||0)+(cm.fn||0)+(cm.tp||0);
+  const atkRate = total>0 ? (cm.tp+cm.fp)/total : 0;
+  document.getElementById('atkRateVal').textContent = pct(atkRate);
+  const atkEl=document.getElementById('atkTrend');
+  if(atkEl) atkEl.innerHTML=`<span class="trend warn">${((cm.tp||0)+(cm.fp||0))} flagged flows</span>`;
+
+  // Missed Attacks = FN count
+  document.getElementById('missVal').textContent = String(cm.fn||0);
+  const missEl=document.getElementById('missTrend');
+  if(missEl){
+    if((cm.fn||0)===0) missEl.innerHTML='<span class="trend good">✓ Zero missed</span>';
+    else missEl.innerHTML=`<span class="trend bad">⚠ ${cm.fn} slipped through</span>`;
+  }
+
+
+
+  // ── Confusion matrix ────────────────────────────────────────────────────────
+  document.getElementById('cm-tn').textContent = cm.tn||0;
+  document.getElementById('cm-fp').textContent = cm.fp||0;
+  document.getElementById('cm-fn').textContent = cm.fn||0;
+  document.getElementById('cm-tp').textContent = cm.tp||0;
+
+  // ── ROC curve ──────────────────────────────────────────────────────────────
+  if(d.roc_data&&d.roc_data.fpr.length>1){
+    const ctx=document.getElementById('rocChart').getContext('2d');
+    if(rocChart)rocChart.destroy();
+    rocChart=new Chart(ctx,{
+      type:'line',
+      data:{
+        labels:d.roc_data.fpr.map(v=>v.toFixed(3)),
+        datasets:[
+          {label:'Model ROC',data:d.roc_data.tpr,borderColor:'#00e0ff',
+           backgroundColor:'rgba(0,224,255,.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:2},
+          {label:'Random',data:d.roc_data.fpr,borderColor:'#334155',
+           borderDash:[5,5],pointRadius:0,fill:false,borderWidth:1}
+        ]
+      },
+      options:{animation:false,scales:{
+        x:{title:{display:true,text:'FPR',color:'#64748b'},ticks:{color:'#475569',maxTicksLimit:6},grid:{color:'rgba(255,255,255,.04)'}},
+        y:{title:{display:true,text:'TPR',color:'#64748b'},ticks:{color:'#475569'},grid:{color:'rgba(255,255,255,.04)'}}
+      },plugins:{legend:{labels:{color:'#64748b',font:{size:11}}}}}
+    });
+    const rocAuc = trapzAUC(d.roc_data.fpr, d.roc_data.tpr);
+    document.getElementById('rocAucBadge').textContent = `AUC: ${rocAuc.toFixed(3)}`;
+  }
+
+  // ── PR curve ───────────────────────────────────────────────────────────────
+  if(d.pr_data&&d.pr_data.recall.length>1){
+    const ctx=document.getElementById('prChart').getContext('2d');
+    if(prChart)prChart.destroy();
+    // sklearn's precision_recall_curve returns recall in descending order —
+    // pair + sort ascending by recall so the line and axis both plot correctly.
+    const prPoints = d.pr_data.recall
+      .map((r,i)=>({x:r, y:d.pr_data.precision[i]}))
+      .sort((a,b)=>a.x-b.x);
+    prChart=new Chart(ctx,{
+      type:'line',
+      data:{
+        datasets:[
+          {label:'PR Curve',data:prPoints,borderColor:'#6a5cff',
+           backgroundColor:'rgba(106,92,255,.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:2}
+        ]
+      },
+      options:{animation:false,scales:{
+        x:{type:'linear',min:0,max:1,title:{display:true,text:'Recall',color:'#64748b'},ticks:{color:'#475569',maxTicksLimit:6},grid:{color:'rgba(255,255,255,.04)'}},
+        y:{title:{display:true,text:'Precision',color:'#64748b'},ticks:{color:'#475569'},grid:{color:'rgba(255,255,255,.04)'}}
+      },plugins:{legend:{labels:{color:'#64748b',font:{size:11}}}}}
+    });
+    const prAuc = trapzAUC(d.pr_data.recall, d.pr_data.precision);
+    document.getElementById('prAucBadge').textContent = `AUC: ${prAuc.toFixed(3)}`;
+  }
+
+  // ── Class distribution ─────────────────────────────────────────────────────
+  if(d.class_distribution){
+    const ctx=document.getElementById('classChart').getContext('2d');
+    if(classChart)classChart.destroy();
+    const labels=Object.keys(d.class_distribution);
+    const vals=Object.values(d.class_distribution);
+    const colors=labels.map(l=>CLASS_COLORS[CLASS_NAMES.indexOf(l)]||'#888');
+    classChart=new Chart(ctx,{
+      type:'bar',
+      data:{labels,datasets:[{
+        label:'Flows',data:vals,
+        backgroundColor:colors.map(c=>c+'88'),borderColor:colors,borderWidth:1,borderRadius:4
+      }]},
+      options:{animation:false,scales:{
+        x:{ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,.04)'}},
+        y:{ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,.04)'},beginAtZero:true}
+      },plugins:{legend:{display:false}}}
+    });
+  }
+
+  // ── Top IPs ────────────────────────────────────────────────────────────────
+  const tbody=document.getElementById('topIpsBody');
+  if(d.top_ips&&d.top_ips.length>0){
+    const max=d.top_ips[0].count||1;
+    tbody.innerHTML=d.top_ips.map((r,i)=>{
+      const pct=Math.round(r.count/max*100);
+      return `<tr>
+        <td style="color:#475569;padding:7px 8px;">${i+1}</td>
+        <td style="font-family:monospace;color:#e2e8f0;padding:7px 8px;">${r.ip}</td>
+        <td style="color:#ef4444;font-weight:700;padding:7px 8px;">${r.count}</td>
+        <td style="padding:7px 8px;width:80px;">
+          <div style="background:rgba(239,68,68,.12);border-radius:3px;height:6px;">
+            <div style="background:#ef4444;height:6px;border-radius:3px;width:${pct}%;"></div>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }else{
+    tbody.innerHTML='<tr><td colspan="4" style="color:#475569;padding:12px 8px;">No attack flows recorded yet</td></tr>';
+  }
+
+  // ── Top features ───────────────────────────────────────────────────────────
+  const featDiv=document.getElementById('topFeatures');
+  if(d.top_features&&d.top_features.length>0){
+    const maxScore=Math.max(...d.top_features.map(f=>f.score))||1;
+    featDiv.innerHTML=d.top_features.slice(0,8).map((f,i)=>{
+      const pct=Math.round(f.score/maxScore*100);
+      return `<div class="feat-row">
+        <div class="feat-name">
+          <span>#${i+1} ${f.feature}</span>
+          <span style="color:#475569;">diff ${f.score.toFixed(3)}</span>
+        </div>
+        <div class="feat-bg"><div class="feat-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+  }else{
+    featDiv.innerHTML='<div style="color:#475569;font-size:13px;padding:8px 0;">No feature data yet</div>';
+  }
+}
+
+loadMetrics();
+setInterval(loadMetrics, 15000);
+</script>
+{% endblock %}
