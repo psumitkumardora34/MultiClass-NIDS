@@ -42,8 +42,8 @@ Follow these steps to get the server running locally:
 
 ### 1️⃣ Clone the Repository
 ```bash
-git clone https://github.com/Santanu2003/NIDS_FinalYearProject.git
-cd NIDS_FinalYearProject
+git clone https://github.com/psumitkumardora34/MultiClass-NIDS.git
+cd MultiClass-NIDS
 ```
 ## Downloading model Hugging Face
 
